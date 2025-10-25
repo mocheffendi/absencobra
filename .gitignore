@@ -1,0 +1,54 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+.dart_tool/
+.flutter-plugins-dependencies
+.pub/
+build/
+coverage/
+**/ios/Flutter/.last_build_id
+**/android/app/src/main/java/**/GeneratedPluginRegistrant.java
+
+# Android build outputs
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# iOS
+ios/Flutter/flutter_export_environment.sh
+ios/.generated/
+
+# Web build (optional)
+web/.dart_tool/
+web/build/
+
+# Keys (optional if included in project)
+*.keystore
+*.jks
+key.properties
+
+# Firebase config (optional if private)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
