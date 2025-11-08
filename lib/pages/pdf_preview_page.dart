@@ -2,26 +2,38 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
-class PdfPreviewPage extends StatefulWidget {
+// Provider to hold loaded PDF bytes for preview
+class PdfBytesNotifier extends Notifier<Uint8List?> {
+  @override
+  Uint8List? build() => null;
+
+  void setBytes(Uint8List? b) => state = b;
+}
+
+final pdfBytesProvider = NotifierProvider<PdfBytesNotifier, Uint8List?>(
+  () => PdfBytesNotifier(),
+);
+
+class PdfPreviewPage extends ConsumerStatefulWidget {
   final String filePath;
   const PdfPreviewPage({super.key, required this.filePath});
 
   @override
-  State<PdfPreviewPage> createState() => _PdfPreviewPageState();
+  ConsumerState<PdfPreviewPage> createState() => _PdfPreviewPageState();
 }
 
-class _PdfPreviewPageState extends State<PdfPreviewPage> {
-  Uint8List? _pdfBytes;
-
+class _PdfPreviewPageState extends ConsumerState<PdfPreviewPage> {
   @override
   void initState() {
     super.initState();
     File(widget.filePath).readAsBytes().then((bytes) {
       if (mounted) {
-        setState(() => _pdfBytes = bytes);
+        ref.read(pdfBytesProvider.notifier).setBytes(bytes);
       }
     });
   }
@@ -36,6 +48,45 @@ class _PdfPreviewPageState extends State<PdfPreviewPage> {
     await SharePlus.instance.share(
       ShareParams(text: 'Slip Gaji', files: [XFile(widget.filePath)]),
     );
+  }
+
+  Future<void> _downloadPdf() async {
+    try {
+      final src = File(widget.filePath);
+      if (!await src.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('File tidak ditemukan')));
+        }
+        return;
+      }
+
+      // Prefer a user-visible Downloads folder inside app documents
+      final baseDir = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory(
+        '${baseDir.path}${Platform.pathSeparator}Downloads',
+      );
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+
+      final fileName = File(widget.filePath).uri.pathSegments.last;
+      final destPath = '${downloadsDir.path}${Platform.pathSeparator}$fileName';
+      await src.copy(destPath);
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('File disimpan: $destPath')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal simpan file: $e')));
+      }
+    }
   }
 
   @override
@@ -65,6 +116,7 @@ class _PdfPreviewPageState extends State<PdfPreviewPage> {
         // ),
         title: const Text('Slip Gaji', style: TextStyle(color: Colors.white)),
         actions: [
+          IconButton(icon: const Icon(Icons.download), onPressed: _downloadPdf),
           IconButton(icon: const Icon(Icons.share), onPressed: _sharePdf),
         ],
       ),
@@ -81,20 +133,23 @@ class _PdfPreviewPageState extends State<PdfPreviewPage> {
             ),
           ),
           SafeArea(
-            child: _pdfBytes == null
-                ? const Center(child: CircularProgressIndicator())
-                : Container(
-                    color: Colors.transparent,
-                    child: _pdfBytes == null
-                        ? const Center(child: CircularProgressIndicator())
-                        : PdfViewer.data(
-                            _pdfBytes!,
-                            sourceName: widget.filePath,
-                            params: const PdfViewerParams(
-                              backgroundColor: Colors.transparent,
-                            ),
+            child: Builder(
+              builder: (context) {
+                final bytes = ref.watch(pdfBytesProvider);
+                return bytes == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : Container(
+                        color: Colors.transparent,
+                        child: PdfViewer.data(
+                          bytes,
+                          sourceName: widget.filePath,
+                          params: const PdfViewerParams(
+                            backgroundColor: Colors.transparent,
                           ),
-                  ),
+                        ),
+                      );
+              },
+            ),
           ),
         ],
       ),

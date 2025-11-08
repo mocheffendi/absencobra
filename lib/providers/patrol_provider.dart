@@ -4,9 +4,10 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:developer';
-import 'package:absencobra/utility/settings.dart';
+import 'dart:io';
+import 'package:cobra_apps/utility/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../user.dart';
+import '../models/user.dart';
 
 // Model untuk patrol data
 class PatrolData {
@@ -241,6 +242,20 @@ class PatrolNotifier extends Notifier<PatrolState> {
           error: "Gagal kirim data, code: ${response.statusCode}",
         );
       }
+    } on SocketException catch (e) {
+      log("Patrol network error: $e");
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Internet is disconnected, please check your internet connection',
+      );
+    } on http.ClientException catch (e) {
+      log("Patrol client error: $e");
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Internet is disconnected, please check your internet connection',
+      );
     } catch (e) {
       log("Patrol error: $e");
       state = state.copyWith(
@@ -314,6 +329,20 @@ class PatrolNotifier extends Notifier<PatrolState> {
           error: "Server error: ${response.statusCode}",
         );
       }
+    } on SocketException catch (e) {
+      log("Fetch patrol network error: $e");
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Internet is disconnected, please check your internet connection',
+      );
+    } on http.ClientException catch (e) {
+      log("Fetch patrol client error: $e");
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Internet is disconnected, please check your internet connection',
+      );
     } catch (e) {
       log("Fetch patrol error: $e");
       state = state.copyWith(

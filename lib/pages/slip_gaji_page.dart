@@ -51,38 +51,26 @@ class _SlipGajiPageState extends ConsumerState<SlipGajiPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        // Use flexibleSpace to layer a frosted glass effect that blurs
-        // the background image beneath the AppBar, creating an acrylic look.
-        // flexibleSpace: ClipRect(
-        //   child: BackdropFilter(
-        //     filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-        //     child: Container(
-        //       color: Colors.white.withValues(
-        //         alpha: 0.12,
-        //       ), // tint over blurred bg
-        //     ),
-        //   ),
-        // ),
         title: const Text('Slip Gaji', style: TextStyle(color: Colors.white)),
       ),
       body: Stack(
         fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: Image.asset('assets/jpg/bg.jpg', fit: BoxFit.cover),
+            child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
           ),
           // Frosted glass overlay: blur the background image beneath the content
-          Positioned.fill(
-            child: ClipRect(
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                child: Container(
-                  // subtle dark tint so content remains readable
-                  color: Colors.black.withValues(alpha: 0.12),
-                ),
-              ),
-            ),
-          ),
+          // Positioned.fill(
+          //   child: ClipRect(
+          //     child: BackdropFilter(
+          //       filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+          //       child: Container(
+          //         // subtle dark tint so content remains readable
+          //         color: Colors.black.withValues(alpha: 0.12),
+          //       ),
+          //     ),
+          //   ),
+          // ),
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
@@ -288,7 +276,7 @@ class _SlipGajiPageState extends ConsumerState<SlipGajiPage> {
       return '$capitalized Rupiah';
     }
 
-    final logoBytes = await rootBundle.load('assets/logo_cobra.jpg');
+    final logoBytes = await rootBundle.load('assets/png/logo.png');
     final logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
     final qrPlaceholderBytes = await rootBundle.load(
       'assets/png/QRCodeGaji.png',
@@ -650,44 +638,50 @@ class _SlipGajiPageState extends ConsumerState<SlipGajiPage> {
     required DateTime firstDate,
     required DateTime lastDate,
   }) async {
-    int selectedYear = initialDate.year;
-    int selectedMonth = initialDate.month;
+    // Use ValueNotifiers instead of local mutable variables to avoid setState
+    // (actual values are held in the notifiers below)
+    // int selectedYear = initialDate.year;
+    // int selectedMonth = initialDate.month;
+    final yearNotifier = ValueNotifier<int>(initialDate.year);
+    final monthNotifier = ValueNotifier<int>(initialDate.month);
+
     return await showDialog<DateTime>(
       context: context,
       barrierDismissible: true,
       barrierColor: Colors.black.withValues(alpha: 0.12),
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 24,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.16),
-                      ),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.16),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Pilih Bulan & Tahun',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Pilih Bulan & Tahun',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButton<int>(
-                          value: selectedYear,
+                    const SizedBox(height: 12),
+                    ValueListenableBuilder<int>(
+                      valueListenable: yearNotifier,
+                      builder: (context, yearValue, _) {
+                        return DropdownButton<int>(
+                          value: yearValue,
                           items: [
                             for (
                               int y = firstDate.year;
@@ -700,11 +694,16 @@ class _SlipGajiPageState extends ConsumerState<SlipGajiPage> {
                               ),
                           ],
                           onChanged: (y) {
-                            if (y != null) setState(() => selectedYear = y);
+                            if (y != null) yearNotifier.value = y;
                           },
-                        ),
-                        DropdownButton<int>(
-                          value: selectedMonth,
+                        );
+                      },
+                    ),
+                    ValueListenableBuilder<int>(
+                      valueListenable: monthNotifier,
+                      builder: (context, monthValue, _) {
+                        return DropdownButton<int>(
+                          value: monthValue,
                           items: [
                             for (int m = 1; m <= 12; m++)
                               DropdownMenuItem(
@@ -713,34 +712,34 @@ class _SlipGajiPageState extends ConsumerState<SlipGajiPage> {
                               ),
                           ],
                           onChanged: (m) {
-                            if (m != null) setState(() => selectedMonth = m);
+                            if (m != null) monthNotifier.value = m;
                           },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Batal'),
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Batal'),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(
-                                context,
-                                DateTime(selectedYear, selectedMonth),
-                              ),
-                              child: const Text('Pilih'),
-                            ),
-                          ],
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(
+                            context,
+                            DateTime(yearNotifier.value, monthNotifier.value),
+                          ),
+                          child: const Text('Pilih'),
                         ),
                       ],
                     ),
-                  ),
+                  ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );

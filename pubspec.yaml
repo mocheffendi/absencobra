@@ -1,5 +1,5 @@
-name: absencobra
-description: "A new Flutter project."
+name: cobra_apps
+description: "Cobra Apps - Aplikasi Absensi For Cobra Team"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -42,13 +42,20 @@ dependencies:
   pdfrx: ^2.2.5
   share_plus: ^12.0.1
   intl: ^0.20.2
-  qr_code_scanner_plus: ^2.0.13
+  google_mlkit_barcode_scanning: ^0.14.1
   geocoding: ^4.0.0
   geolocator: ^14.0.2
   image_picker: ^1.2.0
   camera: ^0.11.2+1
   flutter_launcher_icons: ^0.14.4
   cached_network_image: ^3.4.1
+  permission_handler: ^12.0.1
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+  flutter_map: ^6.0.0
+  latlong2: ^0.9.0
+  flutter_image_compress: ^2.1.0
+  path_provider: ^2.0.0
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +67,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -77,14 +87,8 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/png/logo.png
-    - assets/jpg/bg.jpg
     - assets/jpg/bg_blur.jpg
     - assets/png/QRCodeGaji.png
-    - assets/logo_cobra.jpg
-    - assets/logo_cobra.png
-    - assets/bg.jpg
-    - assets/bg2.jpg
-    - assets/login_bg_custom.jpg
     - .env.dev
     - .env.staging
     - .env.prod

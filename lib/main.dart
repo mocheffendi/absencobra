@@ -1,16 +1,14 @@
-import 'dart:ui' as ui;
-
-import 'package:absencobra/providers/auth_provider.dart';
+import 'package:cobra_apps/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:absencobra/pages/account_setting_page.dart';
-import 'package:absencobra/pages/login_page.dart';
-import 'package:absencobra/pages/patrol_page.dart';
-import 'package:absencobra/pages/dashboard_page.dart';
-import 'package:absencobra/pages/slip_gaji_page.dart';
-import 'package:absencobra/pages/absen_page.dart';
-import 'package:absencobra/pages/kinerja_page.dart';
-// import 'package:absencobra/providers/auth_provider.dart';
+import 'package:cobra_apps/pages/account_setting_page.dart';
+import 'package:cobra_apps/pages/login_page.dart';
+import 'package:cobra_apps/pages/patrol_page.dart';
+import 'package:cobra_apps/pages/dashboard_page.dart';
+import 'package:cobra_apps/pages/slip_gaji_page.dart';
+import 'package:cobra_apps/pages/absen_page.dart';
+import 'package:cobra_apps/pages/kinerja_page.dart';
+// import 'package:cobra_apps/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 Future<void> main() async {
@@ -26,7 +24,7 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
-      title: 'AbsenCobra',
+      title: 'Cobra Apps',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         // Ensure text is white by default across the app
@@ -81,20 +79,20 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
         body: Stack(
           children: [
             Positioned.fill(
-              child: Image.asset('assets/jpg/bg.jpg', fit: BoxFit.cover),
+              child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
             ),
             // Frosted glass overlay: blur the background image beneath the content
-            Positioned.fill(
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                  child: Container(
-                    // subtle dark tint so content remains readable
-                    color: Colors.black.withValues(alpha: 0.12),
-                  ),
-                ),
-              ),
-            ),
+            // Positioned.fill(
+            //   child: ClipRect(
+            //     child: BackdropFilter(
+            //       filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+            //       child: Container(
+            //         // subtle dark tint so content remains readable
+            //         color: Colors.black.withValues(alpha: 0.12),
+            //       ),
+            //     ),
+            //   ),
+            // ),
             const SafeArea(child: Center(child: CircularProgressIndicator())),
           ],
         ),

@@ -1,22 +1,31 @@
-import 'package:absencobra/pages/patrol_page.dart';
-import 'package:absencobra/utility/getinitials.dart';
-import 'package:absencobra/utility/settings.dart';
+import 'dart:convert';
+
+
+// import 'package:cobra_apps/pages/shared_prefs_page.dart'; // unused
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
-import 'dart:io';
-import '../providers/absen_provider.dart';
-import '../providers/avatar_provider.dart';
-import '../providers/patrol_provider.dart';
-// import '../utility/getinitials.dart';
-import '../user.dart';
-import '../providers/user_provider.dart';
-import 'account_setting_page.dart';
-import 'patrol_image_preview_page.dart';
-// import 'patrol_page_riverpod.dart';
-import 'shared_prefs_page.dart';
-import 'slip_gaji_page.dart';
+
+import 'package:cobra_apps/pages/patrol_page.dart';
+import 'package:cobra_apps/pages/account_setting_page.dart';
+import 'package:cobra_apps/pages/patrol_image_preview_page.dart';
+import 'package:cobra_apps/pages/slip_gaji_page.dart';
+
+import 'package:cobra_apps/utility/getinitials.dart';
+import 'package:cobra_apps/utility/settings.dart';
+import 'package:cobra_apps/utility/formatters.dart';
+
+import 'package:cobra_apps/widgets/absen_card.dart';
+import 'package:cobra_apps/widgets/dashboard_menu.dart';
+import 'package:cobra_apps/widgets/dashboard_table.dart';
+import 'package:cobra_apps/widgets/frosted_icon_button.dart';
+
+import 'package:cobra_apps/models/user.dart';
+import 'package:cobra_apps/providers/user_provider.dart';
+import 'package:cobra_apps/providers/absen_provider.dart';
+import 'package:cobra_apps/providers/avatar_provider.dart';
+import 'package:cobra_apps/providers/patrol_provider.dart';
+import 'package:cobra_apps/providers/auth_provider.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -26,22 +35,10 @@ class DashboardPage extends ConsumerStatefulWidget {
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
-  // ignore: unused_field
-  String? _avatarLocalPath;
-  // ignore: unused_field
-  String? _avatarUrlFromPrefs;
-
   late ScrollController _controller;
   bool _atTop = true;
 
-  // Memoized date formatting to avoid repeated computations
-  String _formatPatrolDateTime(DateTime timestamp) {
-    final tanggal =
-        '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
-    final jam =
-        '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
-    return jam.isNotEmpty ? "$tanggal $jam" : tanggal;
-  }
+  // date formatting moved to shared utility: formatters.dart
 
   @override
   void initState() {
@@ -78,26 +75,22 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   Future<void> _loadAvatarFromPrefs() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final al = prefs.getString('avatar_lokal');
-      final a = prefs.getString('avatar');
-      if (mounted) {
-        setState(() {
-          _avatarLocalPath = al;
-          _avatarUrlFromPrefs = a;
-        });
-      }
-    } catch (_) {}
+      // Delegate loading to the AvatarProvider so both provider state and
+      // local fields remain in sync.
+      await ref.read(avatarProvider.notifier).loadAvatarFromPrefs();
+    } catch (_) {
+      // ignore
+    }
   }
 
   Future<void> _refreshDashboard() async {
     // Refresh data sequentially to reduce server load
     try {
-      // Load patrol data first (most important for dashboard)
-      await ref.read(patrolProvider.notifier).fetchPatrolHistory();
-
       // Then load absen data
       await ref.read(absenProvider.notifier).loadAbsenData();
+
+      // Load patrol data first (most important for dashboard)
+      await ref.read(patrolProvider.notifier).fetchPatrolHistory();
 
       // Finally load avatar data
       await _loadAvatarFromPrefs();
@@ -108,14 +101,32 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(userProvider);
+  final user = ref.watch(userProvider);
+  final avatarPath = user?.avatar ?? '';
     final patrolState = ref.watch(patrolProvider);
     final patrolList = patrolState.patrolList;
     final isLoadingPatrol = patrolState.isLoading;
     final patrolError = patrolState.error;
     final absenData = ref.watch(absenProvider);
-    final avatarData = ref.watch(avatarProvider);
+    
 
+    // Listen for user changes and reload/reset absen data when user changes
+    ref.listen(authProvider, (previous, next) {
+      // When user logs in (from null to user)
+      if (previous?.value == null && next.hasValue && next.value != null) {
+        // User logged in, load absen data
+        ref.read(absenProvider.notifier).loadAbsenData();
+      }
+      // When user logs out (from user to null)
+      else if (previous?.hasValue == true &&
+          previous?.value != null &&
+          (!next.hasValue || next.value == null)) {
+        // User logged out, reset absen data
+        ref.read(absenProvider.notifier).reset();
+      }
+    });
+
+    // Debug logging for absen data
     final nama = user?.nama ?? 'User';
 
     return Scaffold(
@@ -129,18 +140,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        // Use flexibleSpace to layer a frosted glass effect that blurs
-        // the background image beneath the AppBar, creating an acrylic look.
-        // flexibleSpace: ClipRect(
-        //   child: BackdropFilter(
-        //     filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-        //     child: Container(
-        //       color: Colors.white.withValues(
-        //         alpha: 0.12,
-        //       ), // tint over blurred bg
-        //     ),
-        //   ),
-        // ),
+
         title: Row(
           children: [
             Image.asset("assets/png/logo.png", height: 32),
@@ -165,17 +165,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               child: CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.white,
-                foregroundImage: avatarData.avatarLocalPath != null
-                    ? FileImage(File(avatarData.avatarLocalPath!))
-                          as ImageProvider
-                    : (avatarData.avatarUrlFromPrefs != null &&
-                              avatarData.avatarUrlFromPrefs!.isNotEmpty
-                          ? NetworkImage(avatarData.avatarUrlFromPrefs!)
-                          : null),
-                child:
-                    avatarData.avatarLocalPath == null &&
-                        (avatarData.avatarUrlFromPrefs == null ||
-                            avatarData.avatarUrlFromPrefs!.isEmpty)
+                foregroundImage: avatarPath.isNotEmpty
+                    ? NetworkImage(
+                        'https://panelcobra.cbsguard.co.id/assets/img/avatar/$avatarPath')
+                    : null,
+                child: avatarPath.isEmpty
                     ? Text(
                         getInitials(nama),
                         style: const TextStyle(
@@ -220,7 +214,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: _buildAbsenCard(
+                              child: AbsenCard(
                                 icon: Icons.login,
                                 title: "Absen Masuk",
                                 color: Colors.green,
@@ -229,7 +223,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             ),
                             SizedBox(width: 10),
                             Expanded(
-                              child: _buildAbsenCard(
+                              child: AbsenCard(
                                 icon: Icons.logout,
                                 title: "Absen Pulang",
                                 color: Colors.red,
@@ -244,23 +238,22 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _buildMenu(
-                              context,
-                              Icons.fingerprint,
-                              "Absen",
-                              () => Navigator.pushNamed(context, "/absen"),
+                            DashboardMenu(
+                              icon: Icons.fingerprint,
+                              label: "Absen",
+                              onTap: () =>
+                                  Navigator.pushNamed(context, "/absen"),
                             ),
-                            _buildMenu(
-                              context,
-                              Icons.bar_chart,
-                              "Kinerja",
-                              () => Navigator.pushNamed(context, "/kinerja"),
+                            DashboardMenu(
+                              icon: Icons.bar_chart,
+                              label: "Kinerja",
+                              onTap: () =>
+                                  Navigator.pushNamed(context, "/kinerja"),
                             ),
-                            _buildMenu(
-                              context,
-                              Icons.shield,
-                              "Patrol",
-                              () async {
+                            DashboardMenu(
+                              icon: Icons.shield,
+                              label: "Patrol",
+                              onTap: () async {
                                 final result = await Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -275,11 +268,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                 }
                               },
                             ),
-                            _buildMenu(
-                              context,
-                              Icons.receipt_long,
-                              "Slip",
-                              () => Navigator.push(
+                            DashboardMenu(
+                              icon: Icons.receipt_long,
+                              label: "Slip",
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => const SlipGajiPage(),
@@ -343,7 +335,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           );
                         },
                       ),
-                      _buildTable(
+                      DashboardTable(
                         title: "Absensi 7 Hari Terakhir",
                         headers: ["Tanggal", "In", "Out"],
                         absenData: absenData,
@@ -471,7 +463,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  _formatPatrolDateTime(
+                                                  formatPatrolDateTime(
                                                     row.timestamp,
                                                   ),
                                                   style: TextStyle(
@@ -511,9 +503,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                                     onTap: () {
                                                       final imageUrl =
                                                           '$kBaseUrl$kPatrolUrl${row.fotoUrl}';
-                                                      print(
-                                                        'Opening image preview: $imageUrl',
-                                                      );
                                                       Navigator.push(
                                                         context,
                                                         MaterialPageRoute(
@@ -607,17 +596,43 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildFrostedIconButton(Icons.home, onPressed: () {}),
-              _buildFrostedIconButton(Icons.camera_alt, onPressed: () {}),
+              FrostedIconButton(icon: Icons.home, onPressed: () {}),
+              FrostedIconButton(
+                icon: Icons.bar_chart,
+                onPressed: () {
+                  Navigator.pushNamed(context, "/kinerja");
+                },
+              ),
               const SizedBox(width: 40),
-              _buildFrostedIconButton(Icons.inventory, onPressed: () {}),
-              _buildFrostedIconButton(
-                Icons.description,
+              FrostedIconButton(
+                icon: Icons.shield,
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PatrolPage()),
+                  );
+                  if (result == true) {
+                    // refresh patrol history via provider
+                    ref.read(patrolProvider.notifier).fetchPatrolHistory();
+                  }
+
+                  // Navigator.push(
+                  //   context,
+                  //   MaterialPageRoute(builder: (_) => const TestPage()),
+                  // );
+                },
+              ),
+              FrostedIconButton(
+                icon: Icons.receipt_long,
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const SharedPrefsPage()),
+                    MaterialPageRoute(builder: (_) => const SlipGajiPage()),
                   );
+                  // Navigator.push(
+                  //   context,
+                  //   MaterialPageRoute(builder: (_) => const SharedPrefsPage()),
+                  // );
                 },
               ),
             ],
@@ -628,243 +643,21 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        onPressed: () {},
+        onPressed: () {
+          Navigator.pushNamed(context, "/absen");
+        },
         child: Container(
-          width: 56,
-          height: 56,
+          width: 64,
+          height: 64,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.12),
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           ),
-          child: const Icon(Icons.filter_list, color: Colors.white),
+          child: const Icon(Icons.fingerprint, color: Colors.white, size: 54),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
-
-  // Absen card used in the dashboard
-  Widget _buildAbsenCard({
-    required IconData icon,
-    required String title,
-    required Color color,
-    required AbsenData absenData,
-  }) {
-    // Frosted glass absen card: blur the background beneath the card
-    return Container(
-      // shape: RoundedRectangleBorder(borderRadius: borderRadius),
-      // elevation: 4,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-      ),
-      height: 120,
-      padding: const EdgeInsets.all(15),
-      // slightly stronger tint so text remains readable over background
-      // color: Colors.white.withValues(alpha: 0.10),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: 30),
-          const SizedBox(height: 10),
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          Text(
-            // Show Masuk time on Masuk card and Pulang time on Pulang card
-            title.contains('Masuk')
-                ? (absenData.wktMasukToday ?? "__:__:__")
-                : (title.contains('Pulang')
-                      ? (absenData.wktPulangToday ?? "__:__:__")
-                      : "__:__:__"),
-            style: TextStyle(color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenu(
-    BuildContext context,
-    IconData icon,
-    String label,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          SizedBox(
-            width: 50,
-            height: 50,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.10),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-              ),
-              child: Center(child: Icon(icon, color: Colors.white, size: 28)),
-            ),
-          ),
-          SizedBox(height: 5),
-          Text(label, style: const TextStyle(color: Colors.white)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTable({
-    required String title,
-    required List<String> headers,
-    required AbsenData absenData,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12.0),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Column(
-          children: [
-            // frosted header bar (translucent instead of solid blue)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(12.0),
-                ),
-              ),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            Table(
-              border: TableBorder.symmetric(
-                inside: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-                outside: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.04),
-                ),
-              ),
-              children: [
-                TableRow(
-                  // translucent header row to avoid solid white
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                  ),
-                  children: headers
-                      .map(
-                        (h) => Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            h,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-                // Data rows from absenData
-                if (absenData.isLoading)
-                  TableRow(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      SizedBox(),
-                      SizedBox(),
-                    ],
-                  )
-                else if (absenData.absensi7.isEmpty)
-                  TableRow(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          'Tidak ada data',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                      SizedBox(),
-                      SizedBox(),
-                    ],
-                  )
-                else
-                  ...absenData.absensi7.map(
-                    (r) => TableRow(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            r['tanggal'] ?? '-',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            r['in'] ?? '-',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            r['out'] ?? '-',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // small helper to build frosted circular icon buttons used in bottom bar
-  Widget _buildFrostedIconButton(
-    IconData icon, {
-    required VoidCallback onPressed,
-  }) {
-    return SizedBox(
-      width: 44,
-      height: 44,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          shape: BoxShape.circle,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            child: Center(child: Icon(icon, color: Colors.white)),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // time formatting helper removed — not used in this read-only dashboard
 }

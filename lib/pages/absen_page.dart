@@ -1,30 +1,29 @@
 import 'dart:convert';
 import 'dart:developer';
 
-import 'package:absencobra/pages/absen_masuk_page.dart';
-import 'package:absencobra/pages/absen_pulang_page.dart';
-import 'package:absencobra/pages/create_avatar_page.dart';
-import 'package:absencobra/pages/scan_masuk_page.dart';
-import 'package:absencobra/pages/scan_pulang_page.dart';
-import 'package:absencobra/utility/settings.dart';
+import 'package:cobra_apps/pages/absen_masuk_page.dart';
+import 'package:cobra_apps/pages/absen_pulang_page.dart';
+import 'package:cobra_apps/pages/create_avatar_page.dart';
+import 'package:cobra_apps/pages/scan_masuk_page.dart';
+import 'package:cobra_apps/pages/scan_pulang_page.dart';
+import 'package:cobra_apps/utility/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cobra_apps/providers/page_providers.dart';
 import '../providers/attendance_provider.dart';
-import '../user.dart';
+import '../models/user.dart';
 
-class AbsenPage extends StatefulWidget {
+class AbsenPage extends ConsumerStatefulWidget {
   const AbsenPage({super.key});
 
   @override
-  State<AbsenPage> createState() => _AbsenPageState();
+  ConsumerState<AbsenPage> createState() => _AbsenPageState();
 }
 
-class _AbsenPageState extends State<AbsenPage> {
-  Map<String, dynamic>? _cekModeData;
-
+class _AbsenPageState extends ConsumerState<AbsenPage> {
   @override
   void initState() {
     super.initState();
@@ -66,7 +65,8 @@ class _AbsenPageState extends State<AbsenPage> {
         final data = await _cekModAbsen();
         if (data != null) {
           if (!mounted) return;
-          setState(() => _cekModeData = data);
+          // store cek mode data in Riverpod provider instead of local setState
+          ref.read(absenPageProvider.notifier).setCekModeData(data);
           log('Cek mode data: $data');
           // route according to rules:
           // if status true & next_mod=scan_masuk & jenis_aturan='1' -> AbsenMasukPage
@@ -221,7 +221,7 @@ class _AbsenPageState extends State<AbsenPage> {
     final data = await _cekModAbsen();
     if (data != null) {
       if (!mounted) return;
-      setState(() => _cekModeData = data);
+      ref.read(absenPageProvider.notifier).setCekModeData(data);
     }
     if (data == null) {
       if (!mounted) return;
@@ -258,18 +258,6 @@ class _AbsenPageState extends State<AbsenPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        // Use flexibleSpace to layer a frosted glass effect that blurs
-        // the background image beneath the AppBar, creating an acrylic look.
-        // flexibleSpace: ClipRect(
-        //   child: BackdropFilter(
-        //     filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-        //     child: Container(
-        //       color: Colors.white.withValues(
-        //         alpha: 0.12,
-        //       ), // tint over blurred bg
-        //     ),
-        //   ),
-        // ),
         title: const Text('Absen'),
       ),
       body: Stack(
@@ -295,14 +283,19 @@ class _AbsenPageState extends State<AbsenPage> {
                     const SizedBox(height: 12),
                     const Text('Memeriksa mode absen...'),
                     const SizedBox(height: 16),
-                    if (_cekModeData != null) ...[
-                      Text('next_mod: ${_cekModeData!['next_mod'] ?? ''}'),
+                    // Read cek mode data from provider
+                    if (ref.watch(absenPageProvider) != null) ...[
                       Text(
-                        'jenis_aturan: ${_cekModeData!['jenis_aturan'] ?? ''}',
+                        'next_mod: ${ref.watch(absenPageProvider)!['next_mod'] ?? ''}',
                       ),
-                      Text('status: ${_cekModeData!['status'] ?? ''}'),
+                      Text(
+                        'jenis_aturan: ${ref.watch(absenPageProvider)!['jenis_aturan'] ?? ''}',
+                      ),
+                      Text(
+                        'status: ${ref.watch(absenPageProvider)!['status'] ?? ''}',
+                      ),
                       const SizedBox(height: 8),
-                      Text('${_cekModeData!['message'] ?? ''}'),
+                      Text('${ref.watch(absenPageProvider)!['message'] ?? ''}'),
                     ],
                     const SizedBox(height: 16),
                     ElevatedButton(
@@ -318,6 +311,4 @@ class _AbsenPageState extends State<AbsenPage> {
       ),
     );
   }
-
-  // camera/takePicture removed
 }

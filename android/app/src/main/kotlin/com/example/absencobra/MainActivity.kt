@@ -1,4 +1,4 @@
-package com.example.absencobra
+package com.app.cobra
 
 import io.flutter.embedding.android.FlutterActivity
 

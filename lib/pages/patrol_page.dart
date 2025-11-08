@@ -1,8 +1,25 @@
-import 'package:absencobra/pages/patrol_photo_page.dart';
+import 'dart:developer';
+import 'dart:io';
+import 'package:cobra_apps/pages/patrol_photo_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
+import 'package:camera/camera.dart';
+// removed unused ScannerOverlay import; using QrisScannerAnimation from scanner_overlay2.dart
+import 'package:cobra_apps/widgets/scanner_overlay2.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import '../providers/patrol_provider.dart';
+
+// Local provider to indicate camera initialization for this page
+class PatrolCameraInitNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void setInitialized(bool v) => state = v;
+}
+
+final patrolCameraInitProvider =
+    NotifierProvider<PatrolCameraInitNotifier, bool>(
+      () => PatrolCameraInitNotifier(),
+    );
 
 class PatrolPage extends ConsumerStatefulWidget {
   const PatrolPage({super.key});
@@ -11,38 +28,121 @@ class PatrolPage extends ConsumerStatefulWidget {
   ConsumerState<PatrolPage> createState() => _PatrolPageState();
 }
 
-class _PatrolPageState extends ConsumerState<PatrolPage>
-    with SingleTickerProviderStateMixin {
-  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
-  QRViewController? controller;
-  late AnimationController _animationController;
-  late Animation<double> _animation;
+class _PatrolPageState extends ConsumerState<PatrolPage> {
+  CameraController? _cameraController;
+  BarcodeScanner? _barcodeScanner;
 
   @override
   void initState() {
     super.initState();
-    // Initialize animation controller for scanning line
-    _animationController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
+    _barcodeScanner = BarcodeScanner();
 
     // Get current location when page loads
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _initializeCamera();
       ref.read(patrolProvider.notifier).getCurrentLocation();
+    });
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) return;
+
+      // Use the first available camera (usually back camera)
+      _cameraController = CameraController(
+        cameras.first,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      await _cameraController!.initialize();
+      if (mounted) {
+        // mark camera initialized via local provider so UI can react without local setState
+        ref.read(patrolCameraInitProvider.notifier).setInitialized(true);
+        _startBarcodeScanning();
+      }
+    } catch (e) {
+      debugPrint('Error initializing camera: $e');
+    }
+  }
+
+  void _startBarcodeScanning() {
+    log('PatrolPage: Starting barcode scanning');
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    // Take picture periodically for barcode scanning
+    Future.doWhile(() async {
+      if (!mounted ||
+          _cameraController == null ||
+          !_cameraController!.value.isInitialized ||
+          ref.read(processingScanProvider)) {
+        return false;
+      }
+
+      try {
+        final XFile file = await _cameraController!.takePicture();
+        final inputImage = InputImage.fromFilePath(file.path);
+        final barcodes = await _barcodeScanner!.processImage(inputImage);
+
+        log('PatrolPage: Detected ${barcodes.length} barcodes');
+
+        for (final barcode in barcodes) {
+          final code = barcode.rawValue;
+          if (code != null && !ref.read(processingScanProvider)) {
+            log('PatrolPage: Processing barcode: $code');
+            ref.read(patrolProvider.notifier).setProcessingScan(true);
+
+            if (!mounted) {
+              await File(file.path).delete();
+              return false;
+            }
+
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => PatrolPhotoPage(qrId: code)),
+            );
+
+            if (result == true) {
+              if (!mounted) {
+                await File(file.path).delete();
+                return false;
+              }
+              Navigator.pop(
+                context,
+                true,
+              ); // kembali ke Dashboard, trigger refresh
+              await File(file.path).delete();
+              return false; // Stop scanning
+            } else {
+              ref.read(patrolProvider.notifier).setProcessingScan(false);
+            }
+            break; // Process only the first barcode found
+          }
+        }
+
+        // Delete the temporary file
+        await File(file.path).delete();
+
+        // Wait a bit before taking next picture
+        await Future.delayed(const Duration(milliseconds: 500));
+      } catch (e) {
+        debugPrint('Error processing barcode: $e');
+        await Future.delayed(const Duration(milliseconds: 1000));
+      }
+
+      return true; // Continue the loop
     });
   }
 
   @override
   void reassemble() {
     super.reassemble();
-    if (controller != null) {
-      controller!.pauseCamera();
-      controller!.resumeCamera();
+    if (_cameraController != null) {
+      _cameraController!.pausePreview();
+      _cameraController!.resumePreview();
     }
   }
 
@@ -59,7 +159,7 @@ class _PatrolPageState extends ConsumerState<PatrolPage>
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(next)));
-        // Clear error after showing in the next frame to avoid provider rebuild
+        // Clear error after showing
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) ref.read(patrolProvider.notifier).clearError();
         });
@@ -75,18 +175,6 @@ class _PatrolPageState extends ConsumerState<PatrolPage>
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        // Use flexibleSpace to layer a frosted glass effect that blurs
-        // the background image beneath the AppBar, creating an acrylic look.
-        // flexibleSpace: ClipRect(
-        //   child: BackdropFilter(
-        //     filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-        //     child: Container(
-        //       color: Colors.white.withValues(
-        //         alpha: 0.12,
-        //       ), // tint over blurred bg
-        //     ),
-        //   ),
-        // ),
         title: const Text(
           "Patroli Scan QRCode",
           style: TextStyle(color: Colors.white),
@@ -97,75 +185,30 @@ class _PatrolPageState extends ConsumerState<PatrolPage>
           Positioned.fill(
             child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
           ),
-          // reduced overlay so background remains visible through frosted elements
           Positioned.fill(
-            child: Container(
-              // subtle dark tint so content remains readable
-              color: Colors.black.withValues(alpha: 0.15),
-            ),
+            child: Container(color: Colors.black.withValues(alpha: 0.15)),
           ),
           SafeArea(
             child: Stack(
               children: [
-                // Main column holds QRView and the Scan Ulang button
+                // Camera preview
                 Column(
                   children: [
                     Expanded(
                       flex: 4,
                       child: Stack(
                         children: [
-                          QRView(
-                            key: qrKey,
-                            onQRViewCreated: _onQRViewCreated,
-                            overlay: QrScannerOverlayShape(
-                              borderColor: Colors.green,
-                              borderRadius: 10,
-                              borderLength: 30,
-                              borderWidth: 10,
-                              cutOutSize: 250,
-                            ),
-                          ),
-                          // Animated scanning line
-                          AnimatedBuilder(
-                            animation: _animation,
-                            builder: (context, child) {
-                              return Positioned(
-                                top:
-                                    MediaQuery.of(context).size.height * 0.15 +
-                                    (_animation.value *
-                                        550), // Adjust based on QR viewfinder position
-                                left: MediaQuery.of(context).size.width * 0.2,
-                                right: MediaQuery.of(context).size.width * 0.2,
-                                child: Container(
-                                  height: 2,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.red.withValues(alpha: 0.8),
-                                        Colors.red,
-                                        Colors.red.withValues(alpha: 0.8),
-                                        Colors.transparent,
-                                      ],
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.red.withValues(
-                                          alpha: 0.5,
-                                        ),
-                                        blurRadius: 4,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
+                          _cameraController != null &&
+                                  _cameraController!.value.isInitialized
+                              ? CameraPreview(_cameraController!)
+                              : const Center(
+                                  child: CircularProgressIndicator(),
                                 ),
-                              );
-                            },
-                          ),
+                          // Scanner overlay on top of camera preview
+                          const Positioned.fill(child: QrisScannerAnimation()),
                         ],
                       ),
                     ),
-                    // removed inline Scan Ulang button; moved to bottom-center
                   ],
                 ),
 
@@ -234,7 +277,9 @@ class _PatrolPageState extends ConsumerState<PatrolPage>
                         color: Colors.white.withValues(alpha: 0.12),
                         child: InkWell(
                           onTap: () {
-                            controller?.resumeCamera();
+                            ref
+                                .read(patrolProvider.notifier)
+                                .setProcessingScan(false);
                             ref
                                 .read(patrolProvider.notifier)
                                 .setScanning(false);
@@ -274,34 +319,10 @@ class _PatrolPageState extends ConsumerState<PatrolPage>
     );
   }
 
-  void _onQRViewCreated(QRViewController ctrl) {
-    controller = ctrl;
-    controller!.scannedDataStream.listen((scanData) async {
-      if (!ref.read(processingScanProvider)) {
-        ref.read(patrolProvider.notifier).setProcessingScan(true);
-        controller?.pauseCamera();
-        if (!mounted) return;
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PatrolPhotoPage(qrId: scanData.code ?? ''),
-          ),
-        );
-        if (result == true) {
-          if (!mounted) return;
-          Navigator.pop(context, true); // kembali ke Dashboard, trigger refresh
-        } else {
-          ref.read(patrolProvider.notifier).setProcessingScan(false);
-          controller?.resumeCamera();
-        }
-      }
-    });
-  }
-
   @override
   void dispose() {
-    _animationController.dispose();
-    controller?.stopCamera();
+    _cameraController?.dispose();
+    _barcodeScanner?.close();
     super.dispose();
   }
 }

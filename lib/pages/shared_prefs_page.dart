@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import '../../user.dart';
+import '../models/user.dart';
 
 final prefsProvider = StateProvider<Map<String, Object?>>((ref) => {});
 final userPrefsProvider = StateProvider<User?>((ref) => null);
@@ -112,6 +112,10 @@ class _SharedPrefsPageState extends ConsumerState<SharedPrefsPage> {
                 title: const Text('Avatar'),
                 subtitle: Text(user.avatar),
               ),
+              // ListTile(
+              //   title: const Text('Avatar_lokal'),
+              //   subtitle: Text(user.avatar_lokal ?? ''),
+              // ),
               if (user.kode_jam != null)
                 ListTile(
                   title: const Text('Kode Jam'),

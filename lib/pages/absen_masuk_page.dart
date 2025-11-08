@@ -1,44 +1,105 @@
 import 'dart:convert';
-import 'dart:developer';
+// import 'dart:developer';
 import 'dart:io';
 import 'dart:async';
-import 'package:absencobra/pages/dashboard_page.dart';
-import 'package:camera/camera.dart';
+import 'package:cobra_apps/pages/dashboard_page.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../user.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import '../models/user.dart';
+import '../services/face_api_service.dart';
+import '../services/absen_masuk_service.dart';
+import '../services/location_service.dart';
+// import '../services/camera_util.dart';
+// import '../providers/face_api_provider.dart';
 
-class AbsenMasukPage extends StatefulWidget {
+// AbsenMasuk page transient state
+class AbsenMasukState {
+  final File? imageFile;
+  final bool loading;
+  final String message;
+  final Position? currentPosition;
+  final String? address;
+  final double? facePercent;
+  final String? faceMessage;
+  final String? avatarUrl;
+
+  const AbsenMasukState({
+    this.imageFile,
+    this.loading = false,
+    this.message = '',
+    this.currentPosition,
+    this.address,
+    this.facePercent,
+    this.faceMessage,
+    this.avatarUrl,
+  });
+
+  AbsenMasukState copyWith({
+    File? imageFile,
+    bool? loading,
+    String? message,
+    Position? currentPosition,
+    String? address,
+    double? facePercent,
+    String? faceMessage,
+    String? avatarUrl,
+  }) {
+    return AbsenMasukState(
+      imageFile: imageFile ?? this.imageFile,
+      loading: loading ?? this.loading,
+      message: message ?? this.message,
+      currentPosition: currentPosition ?? this.currentPosition,
+      address: address ?? this.address,
+      facePercent: facePercent ?? this.facePercent,
+      faceMessage: faceMessage ?? this.faceMessage,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+    );
+  }
+}
+
+class AbsenMasukNotifier extends Notifier<AbsenMasukState> {
+  @override
+  AbsenMasukState build() => const AbsenMasukState();
+
+  void setImage(File? f) => state = state.copyWith(imageFile: f);
+  void setLoading(bool v) => state = state.copyWith(loading: v);
+  void setMessage(String m) => state = state.copyWith(message: m);
+  void setCurrentPosition(Position? p) =>
+      state = state.copyWith(currentPosition: p);
+  void setAddress(String? a) => state = state.copyWith(address: a);
+  void setFacePercent(double? p) => state = state.copyWith(facePercent: p);
+  void setFaceMessage(String? m) => state = state.copyWith(faceMessage: m);
+  void setAvatarUrl(String? u) => state = state.copyWith(avatarUrl: u);
+}
+
+final absenMasukProvider =
+    NotifierProvider<AbsenMasukNotifier, AbsenMasukState>(
+      () => AbsenMasukNotifier(),
+    );
+
+class AbsenMasukPage extends ConsumerStatefulWidget {
   final Map<String, dynamic>? data;
   const AbsenMasukPage({super.key, this.data});
 
   @override
-  State<AbsenMasukPage> createState() => _AbsenMasukPageState();
+  ConsumerState<AbsenMasukPage> createState() => _AbsenMasukPageState();
 }
 
-class _AbsenMasukPageState extends State<AbsenMasukPage> {
-  CameraController? _cameraController;
-  bool _isCameraReady = false;
-  XFile? _imageFile;
-  Position? _currentPosition;
-  String? _address;
-  String? _uploadResponse;
-  bool _canSendAbsen = false;
-  Map<String, dynamic>? _cekModeData;
-  double? _facePercent;
+class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
+  // Transient UI state is managed by absenMasukProvider
 
   @override
   void dispose() {
-    _cameraController?.dispose();
     super.dispose();
   }
 
   void _goToDashboard() {
-    // stop/cleanup any camera or listeners here if needed
-    // then navigate to Dashboard as root
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => DashboardPage()),
       (route) => false,
@@ -49,100 +110,106 @@ class _AbsenMasukPageState extends State<AbsenMasukPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _tryInitCamera();
-      await _getLocation();
+      await _getLocationAndAddress();
+      await _loadAvatarUrl();
     });
   }
 
-  Future<void> _tryInitCamera() async {
-    try {
-      final cameras = await availableCameras();
-      final front = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.isNotEmpty
-            ? cameras.first
-            : throw CameraException('NoCamera', 'No cameras found'),
-      );
-      _cameraController = CameraController(front, ResolutionPreset.medium);
-      await _cameraController!.initialize();
-      // camera initialized; manual capture will be used (tap shutter)
-      if (!mounted) return;
-      setState(() => _isCameraReady = true);
-    } on CameraException catch (e) {
-      log('CameraException: ${e.code} ${e.description}');
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal akses kamera: ${e.code}')));
-    } catch (e) {
-      log('camera init error: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal inisialisasi kamera')));
+  // _initCamera removed
+
+  Future<void> _loadAvatarUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userJson = prefs.getString('user');
+    if (userJson != null) {
+      try {
+        final user = User.fromJson(json.decode(userJson));
+        if (user.avatar.isNotEmpty) {
+          ref
+              .read(absenMasukProvider.notifier)
+              .setAvatarUrl(
+                'https://panelcobra.cbsguard.co.id/assets/img/avatar/${user.avatar}',
+              );
+        }
+      } catch (e) {
+        // ignore avatar error
+      }
     }
   }
 
-  Future<void> _getLocation() async {
+  Future<void> _pickImage() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.front,
+    );
+    if (picked != null) {
+      ref.read(absenMasukProvider.notifier).setImage(File(picked.path));
+      ref.read(absenMasukProvider.notifier).setFacePercent(null);
+      ref.read(absenMasukProvider.notifier).setFaceMessage('');
+      await _uploadFace(File(picked.path));
+    }
+  }
+
+  Future<void> _uploadFace(File imageFile) async {
+    // Compress image before sending to FaceAPI
+    File? compressedFile;
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) return;
-      final perm = await Geolocator.requestPermission();
-      if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) {
+      final targetPath = imageFile.path.replaceFirst('.jpg', '_compressed.jpg');
+      final xfile = await FlutterImageCompress.compressAndGetFile(
+        imageFile.path,
+        targetPath,
+        quality: 70,
+        minWidth: 300,
+        minHeight: 300,
+      );
+      if (xfile != null) {
+        compressedFile = File(xfile.path);
+      } else {
+        compressedFile = imageFile;
+      }
+    } catch (e) {
+      compressedFile = imageFile;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final userJson = prefs.getString('user');
+    User? user;
+    if (userJson != null) {
+      try {
+        user = User.fromJson(json.decode(userJson));
+      } catch (e) {
+        ref
+            .read(absenMasukProvider.notifier)
+            .setFaceMessage("Data user tidak valid");
         return;
       }
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-      if (!mounted) return;
-      setState(() => _currentPosition = pos);
-      // resolve address in background
-      _resolveAddress(pos);
-    } catch (e) {
-      log('location error: $e');
     }
+    if (user == null) {
+      ref
+          .read(absenMasukProvider.notifier)
+          .setFaceMessage("Token autentikasi tidak tersedia");
+      return;
+    }
+    final result = await FaceApiService.uploadFace(
+      imageFile: compressedFile,
+      user: user,
+    );
+    ref.read(absenMasukProvider.notifier).setFacePercent(result?.percent);
+    ref.read(absenMasukProvider.notifier).setFaceMessage(result?.message ?? '');
   }
 
-  Future<void> _resolveAddress(Position pos) async {
-    try {
-      final p = await placemarkFromCoordinates(pos.latitude, pos.longitude);
-      if (p.isNotEmpty) {
-        final pm = p.first;
-        final parts = <String>[];
-        if (pm.name != null && pm.name!.isNotEmpty) parts.add(pm.name!);
-        if (pm.subLocality != null && pm.subLocality!.isNotEmpty) {
-          parts.add(pm.subLocality!);
-        }
-        if (pm.locality != null && pm.locality!.isNotEmpty) {
-          parts.add(pm.locality!);
-        }
-        if (pm.subAdministrativeArea != null &&
-            pm.subAdministrativeArea!.isNotEmpty) {
-          parts.add(pm.subAdministrativeArea!);
-        }
-        if (pm.administrativeArea != null &&
-            pm.administrativeArea!.isNotEmpty) {
-          parts.add(pm.administrativeArea!);
-        }
-        if (pm.postalCode != null && pm.postalCode!.isNotEmpty) {
-          parts.add(pm.postalCode!);
-        }
-        if (pm.country != null && pm.country!.isNotEmpty) {
-          parts.add(pm.country!);
-        }
-        final addr = parts.join(', ');
-        if (!mounted) return;
-        setState(() => _address = addr);
-      }
-    } catch (e) {
-      log('reverse geocode error: $e');
+  Future<void> _getLocationAndAddress() async {
+    final pos = await LocationService.getLocation(context: context);
+    if (!mounted) return;
+    ref.read(absenMasukProvider.notifier).setCurrentPosition(pos);
+    if (pos != null) {
+      final addr = await LocationService.resolveAddress(pos);
+      if (!mounted) return;
+      ref.read(absenMasukProvider.notifier).setAddress(addr);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(absenMasukProvider);
     return PopScope(
       canPop: false, // Prevent automatic pop
       onPopInvokedWithResult: (bool didPop, Object? result) async {
@@ -156,632 +223,303 @@ class _AbsenMasukPageState extends State<AbsenMasukPage> {
         }
       },
       child: Scaffold(
-        extendBodyBehindAppBar: true,
-        resizeToAvoidBottomInset: false,
-        backgroundColor: Colors.transparent,
         appBar: AppBar(
-          toolbarHeight: 50,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-          // flexibleSpace: ClipRect(
-          //   child: BackdropFilter(
-          //     filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-          //     child: Container(color: Colors.white.withValues(alpha: 0.12)),
-          //   ),
-          // ),
-          title: const Text(
-            'Absen Masuk',
-            style: TextStyle(color: Colors.white),
-          ),
+          title: const Text('Absen Masuk'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: _goToDashboard,
           ),
         ),
-        body: Stack(
-          children: [
-            Positioned.fill(
-              child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
-            ),
-            // reduced overlay so background remains visible through frosted elements
-            Positioned.fill(
-              child: Container(
-                // subtle dark tint so content remains readable
-                color: Colors.black.withValues(alpha: 0.15),
-              ),
-            ),
-            SafeArea(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: _isCameraReady && _cameraController != null
-                        ? Stack(
-                            children: [
-                              Positioned.fill(
-                                child: CameraPreview(_cameraController!),
-                              ),
-                              // shutter centered at bottom of camera area
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                bottom: 24,
-                                child: Center(
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      onTap: () async =>
-                                          await _takePictureSafe(),
-                                      customBorder: const CircleBorder(),
-                                      child: Container(
-                                        width: 72,
-                                        height: 72,
-                                        decoration: const BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Colors.white,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black26,
-                                              blurRadius: 4,
-                                              offset: Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Center(
-                                          child: Container(
-                                            width: 52,
-                                            height: 52,
-                                            decoration: const BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Colors.red,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // location box at top-left
-                              Positioned(
-                                left: 12,
-                                top: 12,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black54,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: _currentPosition != null
-                                      ? Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Lat: ${_currentPosition!.latitude.toStringAsFixed(5)}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            Text(
-                                              'Lon: ${_currentPosition!.longitude.toStringAsFixed(5)}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            if (_address != null)
-                                              SizedBox(
-                                                width: 180,
-                                                child: Text(
-                                                  _address!,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 11,
-                                                  ),
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              )
-                                            else
-                                              const Text(
-                                                'Mencari alamat...',
-                                                style: TextStyle(
-                                                  color: Colors.white70,
-                                                  fontSize: 11,
-                                                ),
-                                              ),
-                                            if (_uploadResponse != null)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 6.0,
-                                                ),
-                                                child: SizedBox(
-                                                  width: 180,
-                                                  child: Text(
-                                                    _uploadResponse!,
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 11,
-                                                    ),
-                                                    maxLines: 3,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        )
-                                      : const Text(
-                                          'Mencari lokasi...',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                ),
-                              ),
-                              // face percentage box at top-right
-                              if (_facePercent != null)
-                                Positioned(
-                                  right: 12,
-                                  top: 12,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      '${_facePercent!.toStringAsFixed(1)}%',
-                                      style: const TextStyle(
-                                        color: Colors.yellow,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              // thumbnail preview at bottom-left when image captured
-                              if (_imageFile != null)
-                                Positioned(
-                                  left: 12,
-                                  bottom: 24,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      // show fullscreen preview
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => Dialog(
-                                          backgroundColor: Colors.transparent,
-                                          child: GestureDetector(
-                                            onTap: () =>
-                                                Navigator.of(context).pop(),
-                                            child: Image.file(
-                                              File(_imageFile!.path),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    child: Container(
-                                      width: 72,
-                                      height: 72,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: Colors.white70,
-                                          width: 2,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(6),
-                                        child: Image.file(
-                                          File(_imageFile!.path),
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              // show send button at bottom-right when allowed
-                              if (_canSendAbsen)
-                                Positioned(
-                                  right: 12,
-                                  bottom: 24,
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.green,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 12,
-                                      ),
-                                    ),
-                                    onPressed: () async => await _sendAbsen(),
-                                    child: const Text('Kirim Absen'),
-                                  ),
-                                ),
-
-                              // cek mode absen box at bottom-left (above thumbnail)
-                              if (_cekModeData != null)
-                                Positioned(
-                                  left: 12,
-                                  bottom: 110,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                    width: 200,
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'next_mod: ${_cekModeData!['next_mod'] ?? ''}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        Text(
-                                          'jenis_aturan: ${_cekModeData!['jenis_aturan'] ?? ''}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                        Text(
-                                          'status: ${_cekModeData!['status'] ?? ''}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                        if ((_cekModeData!['message'] ?? '')
-                                            .toString()
-                                            .isNotEmpty)
-                                          SizedBox(
-                                            width: 180,
-                                            child: Text(
-                                              '${_cekModeData!['message']}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 11,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ListView(
+            children: [
+              state.currentPosition != null
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Lat: ${state.currentPosition!.latitude.toStringAsFixed(5)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          'Lon: ${state.currentPosition!.longitude.toStringAsFixed(5)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        if (state.address != null)
+                          SizedBox(
+                            width: 180,
+                            child: Text(
+                              state.address!,
+                              style: const TextStyle(fontSize: 11),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           )
-                        : const Center(child: CircularProgressIndicator()),
+                        else
+                          const Text(
+                            'Mencari alamat...',
+                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                      ],
+                    )
+                  : const Text(
+                      'Mencari lokasi...',
+                      style: TextStyle(fontSize: 12),
+                    ),
+              const SizedBox(height: 16),
+              if (state.currentPosition != null)
+                SizedBox(
+                  height: 200,
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: LatLng(
+                        state.currentPosition!.latitude,
+                        state.currentPosition!.longitude,
+                      ),
+                      initialZoom: 15.0,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'cobra_apps',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: LatLng(
+                              state.currentPosition!.latitude,
+                              state.currentPosition!.longitude,
+                            ),
+                            child: const Icon(
+                              Icons.location_pin,
+                              color: Colors.red,
+                              size: 40,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  // Padding(
-                  //   padding: const EdgeInsets.all(8.0),
-                  //   child: Row(
-                  //     mainAxisAlignment: MainAxisAlignment.center,
-                  //     children: [
-                  //       ElevatedButton(
-                  //         onPressed: () => _startCekFlow(),
-                  //         child: const Text('Cek Mode Absen'),
-                  //       ),
-                  //       const SizedBox(width: 12),
-                  //     ],
-                  //   ),
-                  // ),
-                ],
+                )
+              else
+                const SizedBox(
+                  height: 200,
+                  child: Center(child: Text('Memuat peta...')),
+                ),
+              // Keterangan field removed
+              const SizedBox(height: 16),
+              // Camera preview removed, restore previous layout
+              const SizedBox(height: 16),
+              // FaceAPI status/message above photo
+              if (state.imageFile != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: Builder(
+                    builder: (context) {
+                      if (state.facePercent == null &&
+                          (state.faceMessage == null ||
+                              state.faceMessage!.isEmpty)) {
+                        return const Text(
+                          'Sedang cek kecocokan wajah...',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      } else if (state.facePercent != null) {
+                        return Text(
+                          'Wajah Cocok: ${state.facePercent!.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            color: state.facePercent! >= 65.0
+                                ? Colors.green
+                                : Colors.red,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                          textAlign: TextAlign.center,
+                        );
+                      } else if (state.faceMessage != null &&
+                          state.faceMessage!.isNotEmpty) {
+                        return Text(
+                          state.faceMessage!,
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+              state.imageFile == null
+                  ? const Text('Belum ada foto')
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (state.avatarUrl != null)
+                          Expanded(
+                            child: Container(
+                              height: 200,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: Colors.grey.shade300,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Image.network(
+                                state.avatarUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(Icons.person, size: 120),
+                              ),
+                            ),
+                          ),
+                        Expanded(
+                          child: Container(
+                            height: 200,
+                            margin: const EdgeInsets.only(left: 8),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: Colors.grey.shade300,
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Image.file(
+                              state.imageFile!,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Ambil Foto'),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              state.loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ElevatedButton(
+                      onPressed:
+                          (state.imageFile != null &&
+                              state.facePercent != null &&
+                              state.facePercent! >= 65.0)
+                          ? _submit
+                          : (state.imageFile != null &&
+                                state.facePercent != null &&
+                                state.facePercent! < 65.0)
+                          ? () {
+                              ref
+                                  .read(absenMasukProvider.notifier)
+                                  .setImage(null);
+                              ref
+                                  .read(absenMasukProvider.notifier)
+                                  .setFacePercent(null);
+                              ref
+                                  .read(absenMasukProvider.notifier)
+                                  .setFaceMessage('');
+                              ref
+                                  .read(absenMasukProvider.notifier)
+                                  .setMessage('');
+                            }
+                          : null,
+                      child:
+                          (state.imageFile != null &&
+                              state.facePercent != null &&
+                              state.facePercent! < 65.0)
+                          ? const Text('Ulang Ambil Foto')
+                          : const Text('Kirim Absen'),
+                    ),
+              const SizedBox(height: 16),
+              Text(state.message, style: const TextStyle(color: Colors.red)),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _takePictureSafe() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Kamera tidak siap')));
+  Future<void> _submit() async {
+    final notifier = ref.read(absenMasukProvider.notifier);
+    final state = ref.read(absenMasukProvider);
+
+    if (state.imageFile == null) {
+      notifier.setMessage("Foto wajib diisi");
       return;
     }
+
+    notifier.setLoading(true);
+    notifier.setMessage('');
+
+    // Compress image before sending to backend
+    File? compressedFile;
     try {
-      // If we already have an image, resume camera first to take a new picture
-      if (_imageFile != null) {
-        await _cameraController!.resumePreview();
-      }
-
-      final f = await _cameraController!.takePicture();
-
-      // Pause camera preview after taking picture
-      await _cameraController!.pausePreview();
-
-      setState(() => _imageFile = f);
-      // Immediately upload the taken picture to faceapi endpoint
-      try {
-        await _uploadFace(File(f.path));
-      } catch (e) {
-        log('upload error: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Gagal upload foto: $e')));
-        }
-      }
-    } catch (e) {
-      log('takePicture error: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal ambil foto: $e')));
-    }
-  }
-
-  Future<void> _uploadFace(File imageFile) async {
-    final uri = Uri.parse(
-      'https://absencobra.cbsguard.co.id/include/faceapi.php',
-    );
-
-    final request = http.MultipartRequest('POST', uri);
-    // Read saved user info from User object in SharedPreferences
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('user');
-      User? user;
-      if (userJson != null) {
-        try {
-          user = User.fromJson(json.decode(userJson));
-        } catch (e) {
-          log('Error parsing user data in _uploadFace: $e');
-        }
-      }
-
-      if (user != null) {
-        request.fields['id_pegawai'] = user.id_pegawai.toString();
-        request.fields['username'] = user.username;
-        request.fields['avatar'] = user.avatar;
-        log(
-          'id_pegawai: ${user.id_pegawai}, username: ${user.username}, avatar: ${user.avatar}',
-        );
+      final targetPath = state.imageFile!.path.replaceFirst(
+        '.jpg',
+        '_compressed.jpg',
+      );
+      final xfile = await FlutterImageCompress.compressAndGetFile(
+        state.imageFile!.path,
+        targetPath,
+        quality: 70,
+        minWidth: 300,
+        minHeight: 300,
+      );
+      if (xfile != null) {
+        compressedFile = File(xfile.path);
       } else {
-        // Fallback to defaults if user data not available
-        request.fields['id_pegawai'] = '1';
-        request.fields['username'] = '1001';
-        request.fields['avatar'] = '';
-        log('User data not available, using fallback values');
+        compressedFile = state.imageFile;
       }
     } catch (e) {
-      log('prefs read error: $e');
-      request.fields['id_pegawai'] = '1';
-      request.fields['username'] = '1001';
-      request.fields['avatar'] = '';
+      compressedFile = state.imageFile;
     }
 
-    // Attach file as 'foto' field in jpg format
-    final multipartFile = await http.MultipartFile.fromPath(
-      'foto',
-      imageFile.path,
+    final prefs = await SharedPreferences.getInstance();
+    final userJson = prefs.getString('user');
+    User? user;
+    if (userJson != null) {
+      try {
+        user = User.fromJson(json.decode(userJson));
+      } catch (e) {
+        notifier.setMessage("Data user tidak valid");
+        notifier.setLoading(false);
+        return;
+      }
+    }
+
+    if (user == null) {
+      notifier.setMessage("Token autentikasi tidak tersedia");
+      notifier.setLoading(false);
+      return;
+    }
+
+    final result = await AbsenMasukService.sendAbsen(
+      user: user,
+      position: state.currentPosition,
+      imageFile: compressedFile ?? state.imageFile!,
+      cekModeData: null,
     );
-    request.files.add(multipartFile);
+
+    notifier.setLoading(false);
+    if (result != null && result.error != null) {
+      notifier.setMessage(result.error!);
+      return;
+    }
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Mengunggah foto...')));
-    }
-
-    final streamedResponse = await request.send();
-    final resp = await http.Response.fromStream(streamedResponse);
-
-    if (resp.statusCode == 200) {
-      // Try to parse JSON response if any
-      try {
-        final body = resp.body;
-        if (mounted) {
-          setState(() => _uploadResponse = body);
-          // try parse JSON and extract percent/confidence
-          try {
-            final parsed = json.decode(body);
-            double? pct;
-            if (parsed is Map) {
-              final raw =
-                  parsed['percent'] ??
-                  parsed['persen'] ??
-                  parsed['score'] ??
-                  parsed['match'] ??
-                  parsed['confidence'];
-              if (raw != null) {
-                pct = double.tryParse(raw.toString());
-              } else if (parsed['data'] != null) {
-                final d = parsed['data'];
-                if (d is Map) {
-                  final raw2 = d['percent'] ?? d['persen'] ?? d['confidence'];
-                  if (raw2 != null) pct = double.tryParse(raw2.toString());
-                }
-              }
-            }
-            if (pct != null) {
-              _facePercent = pct;
-              _canSendAbsen = pct >= 65.0;
-            }
-          } catch (e) {
-            log('parse upload response failed: $e');
-          }
-        }
-        log('upload response: $body');
-        // if (mounted) {
-        //   ScaffoldMessenger.of(context).showSnackBar(
-        //     const SnackBar(content: Text('Foto berhasil diunggah')),
-        //   );
-        // }
-      } catch (e) {
-        if (mounted) setState(() => _uploadResponse = 'Upload finished');
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Upload selesai')));
-        }
-      }
-    } else {
-      log('upload failed status: ${resp.statusCode} body: ${resp.body}');
-      if (mounted) {
-        setState(
-          () => _uploadResponse = 'Error ${resp.statusCode}: ${resp.body}',
-        );
-      }
-      throw Exception('Upload failed: ${resp.statusCode}');
-    }
-  }
-
-  Future<void> _sendAbsen() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      // Load user data from SharedPreferences
-      final userJson = prefs.getString('user');
-      User? user;
-      if (userJson != null) {
-        try {
-          user = User.fromJson(json.decode(userJson));
-        } catch (e) {
-          log('Error parsing user data in _sendAbsen: $e');
-        }
-      }
-
-      if (user == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Data user tidak tersedia')),
-          );
-        }
-        return;
-      }
-
-      final idPegawai = user.id_pegawai.toString();
-      final username = user.username;
-      final cabang = user.id_cabang.toString();
-      final jenisAturan =
-          (_cekModeData != null && _cekModeData!['jenis_aturan'] != null)
-          ? _cekModeData!['jenis_aturan'].toString()
-          : user.jenis_aturan;
-      final idTmpt = user.id_tmpt.toString();
-      final avatar = user.avatar;
-
-      final lat = _currentPosition?.latitude.toString() ?? '';
-      final lon = _currentPosition?.longitude.toString() ?? '';
-
-      // tmpt_dikunjungi: try to inference from _cekModeData or send default list [1,2,3]
-      String tmptDikunjungi = '[]';
-      if (_cekModeData != null && _cekModeData!['tmpt_dikunjungi'] != null) {
-        tmptDikunjungi = _cekModeData!['tmpt_dikunjungi'].toString();
-      } else if (_cekModeData != null && _cekModeData!['tmpt'] != null) {
-        tmptDikunjungi = json.encode(_cekModeData!['tmpt']);
-      }
-      // if still empty or equals '[]', set default [1,2,3]
-      if (tmptDikunjungi.trim().isEmpty || tmptDikunjungi.trim() == '[]') {
-        tmptDikunjungi = json.encode([1, 2, 3]);
-      }
-
-      log(
-        "Preparing multipart absen masuk: id_pegawai=$idPegawai username=$username cabang=$cabang latitude=$lat longitude=$lon jenis_aturan=$jenisAturan id_tmpt=$idTmpt avatar=$avatar tmpt_dikunjungi=$tmptDikunjungi",
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result?.message ?? 'Absen berhasil')),
       );
-
-      // Ensure photo exists
-      if (_imageFile == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Foto belum diambil')));
-        }
-        return;
-      }
-
-      final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/include/absenapi.php',
-      );
-      final request = http.MultipartRequest('POST', uri);
-
-      // Add expected form fields
-      request.fields['id_pegawai'] = idPegawai;
-      request.fields['username'] = username;
-      request.fields['cabang'] = cabang;
-      request.fields['latitude'] = lat;
-      request.fields['longitude'] = lon;
-      request.fields['jenis_aturan'] = jenisAturan;
-      request.fields['id_tmpt'] = idTmpt;
-      request.fields['avatar'] = avatar;
-      request.fields['tmpt_dikunjungi'] = tmptDikunjungi;
-
-      // Attach photo file as 'foto'
-      final mp = await http.MultipartFile.fromPath('foto', _imageFile!.path);
-      request.files.add(mp);
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Mengirim absen...')));
-      }
-
-      final streamed = await request.send();
-      final resp = await http.Response.fromStream(streamed);
-
-      if (resp.statusCode == 200) {
-        try {
-          final parsed = json.decode(resp.body);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  parsed['message']?.toString() ?? 'Absen berhasil',
-                ),
-              ),
-            );
-          }
-          log('absen masuk response: ${resp.body}');
-          _goToDashboard();
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Absen berhasil')));
-          }
-          log('absen masuk non-json response: ${resp.body}');
-        }
-      } else {
-        log('absen send failed ${resp.statusCode} ${resp.body}');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Gagal kirim absen: ${resp.statusCode}')),
-          );
-        }
-      }
-    } catch (e) {
-      log('sendAbsen error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error mengirim absen: $e')));
-      }
+      _goToDashboard();
     }
   }
 }

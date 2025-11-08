@@ -1,3 +1,4 @@
+import 'package:cobra_apps/pages/account_profile_photo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/user_provider.dart';
@@ -11,186 +12,333 @@ class AccountSettingPage extends ConsumerStatefulWidget {
 }
 
 class _AccountSettingPageState extends ConsumerState<AccountSettingPage> {
-  Future<void> _logout() async {
-    // Gunakan auth provider logout yang akan membersihkan SharedPreferences dan state
-    ref.read(authProvider.notifier).logout();
-    // Clear user dari provider juga
-    ref.read(userProvider.notifier).clearUser();
-    if (!mounted) return;
-    // Navigasi ke login page dan hapus semua halaman dari stack
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+  void _openAccountProfilePhotoPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => AccountProfilePhotoPage()));
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+  void _openFullScreenProfilePhoto(String avatarUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FullScreenProfilePhoto(avatarUrl: avatarUrl),
+      ),
+    );
+  }
+
+  Widget _readonlyField(
+    IconData icon,
+    String label,
+    String value, {
+    bool isPassword = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(35),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.cyanAccent, width: 1.5),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          Text('$label: ', style: const TextStyle(color: Colors.white)),
+          Icon(icon, color: Colors.cyanAccent, size: 22),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.white),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        isPassword ? '********' : value,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    if (isPassword)
+                      const Icon(
+                        Icons.fingerprint,
+                        color: Colors.blue,
+                        size: 20,
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
+          if (isPassword)
+            const Icon(Icons.visibility, color: Colors.yellow, size: 20),
         ],
       ),
     );
+  }
+
+  Future<void> _logout() async {
+    ref.read(authProvider.notifier).logout();
+    ref.read(userProvider.notifier).clearUser();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(userProvider);
     return Scaffold(
+      extendBody: true,
       extendBodyBehindAppBar: true,
       resizeToAvoidBottomInset: false,
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        toolbarHeight: 50,
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        // flexibleSpace: ClipRect(
-        //   child: BackdropFilter(
-        //     filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-        //     child: Container(color: Colors.white.withAlpha(30)),
-        //   ),
-        // ),
-        title: const Text('Account Setting'),
+        title: const Text(
+          'Account Profile',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: Stack(
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
             child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
           ),
-          // reduced overlay so background remains visible through frosted elements
-          Positioned.fill(
-            child: Container(
-              // subtle dark tint so content remains readable
-              color: Colors.black.withValues(alpha: 0.15),
-            ),
-          ),
+          Positioned.fill(child: Container(color: Colors.black.withAlpha(38))),
           SafeArea(
             child: user == null
-                ? const Center(child: Text('Tidak ada data user'))
+                ? const Center(
+                    child: Text(
+                      'Tidak ada data user',
+                      style: TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  )
                 : ListView(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 32,
+                    ),
                     children: [
                       Center(
-                        child: CircleAvatar(
-                          radius: 48,
-                          backgroundImage: NetworkImage(
-                            'https://panelcobra.cbsguard.co.id/assets/img/avatar/${user.avatar}',
-                          ),
-                          backgroundColor: Colors.grey.shade200,
+                        child: Column(
+                          children: [
+                            Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    _openFullScreenProfilePhoto(
+                                      'https://panelcobra.cbsguard.co.id/assets/img/avatar/${user.avatar}',
+                                    );
+                                  },
+                                  child: Hero(
+                                    tag: 'profile-photo-hero',
+                                    child: CircleAvatar(
+                                      radius: 56,
+                                      backgroundImage: NetworkImage(
+                                        'https://panelcobra.cbsguard.co.id/assets/img/avatar/${user.avatar}',
+                                      ),
+                                      backgroundColor: Colors.grey.shade200,
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: _openAccountProfilePhotoPage,
+                                  child: Container(
+                                    margin: const EdgeInsets.only(
+                                      bottom: 6,
+                                      right: 6,
+                                    ),
+                                    child: CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: Colors.cyanAccent,
+                                      child: const Icon(
+                                        Icons.edit,
+                                        color: Colors.black,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              user.nama ?? '-',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            Text(
+                              user.email ?? '-',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 14,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
+                      ),
+                      const SizedBox(height: 28),
+                      _readonlyField(
+                        Icons.badge,
+                        'ID Pegawai',
+                        user.id_pegawai.toString(),
+                      ),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(Icons.person, 'Nama', user.nama ?? '-'),
+                      const SizedBox(height: 16),
+                      _readonlyField(Icons.credit_card, 'NIP', user.nip),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(Icons.email, 'Email', user.email ?? '-'),
+                      const SizedBox(height: 16),
+                      _readonlyField(Icons.home, 'Alamat', user.alamat ?? '-'),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.account_circle,
+                      //   'Username',
+                      //   user.username,
+                      // ),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.work,
+                      //   'ID Jabatan',
+                      //   user.id_jabatan.toString(),
+                      // ),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.location_city,
+                      //   'ID Tempat',
+                      //   user.id_tmpt.toString(),
+                      // ),
+                      const SizedBox(height: 16),
+                      _readonlyField(
+                        Icons.business,
+                        'Tempat Tugas',
+                        user.tmpt_tugas ?? '-',
                       ),
                       const SizedBox(height: 16),
-                      Center(
-                        child: Text(
-                          user.nama ?? '-',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Text(
-                          user.email ?? '-',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.white70,
-                          ),
-                        ),
+                      _readonlyField(
+                        Icons.cake,
+                        'Tanggal Lahir',
+                        user.tgl_lahir ?? '-',
                       ),
                       const SizedBox(height: 16),
-                      Card(
-                        color: Colors.black,
-                        margin: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildInfoRow(
-                                'ID Pegawai',
-                                user.id_pegawai.toString(),
-                              ),
-                              _buildInfoRow('Nama', user.nama ?? '-'),
-                              _buildInfoRow('NIP', user.nip),
-                              _buildInfoRow('Email', user.email ?? '-'),
-                              _buildInfoRow('Alamat', user.alamat ?? '-'),
-                              _buildInfoRow('Username', user.username),
-                              _buildInfoRow(
-                                'ID Jabatan',
-                                user.id_jabatan.toString(),
-                              ),
-                              _buildInfoRow(
-                                'ID Tempat',
-                                user.id_tmpt.toString(),
-                              ),
-                              _buildInfoRow(
-                                'Tempat Tugas',
-                                user.tmpt_tugas ?? '-',
-                              ),
-                              _buildInfoRow(
-                                'Tanggal Lahir',
-                                user.tgl_lahir ?? '-',
-                              ),
-                              _buildInfoRow('Divisi', user.divisi ?? '-'),
-                              _buildInfoRow(
-                                'ID Cabang',
-                                user.id_cabang.toString(),
-                              ),
-                              _buildInfoRow('Avatar', user.avatar),
-                              _buildInfoRow('Kode Jam', user.kode_jam ?? '-'),
-                              _buildInfoRow('Status', user.status ?? '-'),
-                              _buildInfoRow(
-                                'Tanggal Join',
-                                user.tgl_joint ?? '-',
-                              ),
-                              _buildInfoRow(
-                                'ID Jadwal',
-                                (user.id_jadwal ?? '-').toString(),
-                              ),
-                              _buildInfoRow('Jenis Aturan', user.jenis_aturan),
-                              _buildInfoRow(
-                                'Tempat Dikunjungi',
-                                user.tmpt_dikunjungi ?? '-',
-                              ),
-                            ],
-                          ),
-                        ),
+                      _readonlyField(Icons.group, 'Divisi', user.divisi ?? '-'),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.apartment,
+                      //   'ID Cabang',
+                      //   user.id_cabang.toString(),
+                      // ),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(Icons.image, 'Avatar', user.avatar),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.access_time,
+                      //   'Kode Jam',
+                      //   user.kode_jam ?? '-',
+                      // ),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.verified_user,
+                      //   'Status',
+                      //   user.status ?? '-',
+                      // ),
+                      const SizedBox(height: 16),
+                      _readonlyField(
+                        Icons.calendar_today,
+                        'Tanggal Join',
+                        user.tgl_joint ?? '-',
                       ),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.schedule,
+                      //   'ID Jadwal',
+                      //   (user.id_jadwal ?? '-').toString(),
+                      // ),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.rule,
+                      //   'Jenis Aturan',
+                      //   user.jenis_aturan,
+                      // ),
+                      // const SizedBox(height: 16),
+                      // _readonlyField(
+                      //   Icons.place,
+                      //   'Tempat Dikunjungi',
+                      //   user.tmpt_dikunjungi ?? '-',
+                      // ),
                       const SizedBox(height: 32),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                      SizedBox(
+                        width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: _logout,
-                          icon: const Icon(Icons.logout),
-                          label: const Text('Logout'),
+                          icon: const Icon(Icons.logout, size: 22),
+                          label: const Text(
+                            'Logout',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.redAccent,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
-                              vertical: 14,
-                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(24),
                             ),
+                            elevation: 4,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 24),
                     ],
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class FullScreenProfilePhoto extends StatelessWidget {
+  final String avatarUrl;
+  const FullScreenProfilePhoto({super.key, required this.avatarUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Center(
+          child: Hero(
+            tag: 'profile-photo-hero',
+            child: ClipOval(
+              child: Image.network(
+                avatarUrl,
+                width: MediaQuery.of(context).size.width * 0.7,
+                height: MediaQuery.of(context).size.width * 0.7,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

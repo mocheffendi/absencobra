@@ -1,58 +1,177 @@
 import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
-import 'package:absencobra/pages/absen_page.dart';
-import 'package:absencobra/pages/dashboard_page.dart';
-import 'package:absencobra/utility/file_utils_io.dart';
-import 'package:absencobra/utility/settings.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:cobra_apps/pages/absen_page.dart';
+import 'package:cobra_apps/pages/dashboard_page.dart';
+import 'package:cobra_apps/utility/camera_util.dart';
+import 'package:cobra_apps/utility/settings.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/user.dart';
+import '../services/absen_masuk_service.dart';
+import '../services/face_api_service.dart';
+import '../services/profile_service.dart';
+import '../utility/shared_prefs_util.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class CreateAvatarPage extends StatefulWidget {
+// CreateAvatar page transient state
+class CreateAvatarState {
+  final bool isCameraReady;
+  final XFile? imageFile;
+  final Position? currentPosition;
+  final String? address;
+  final String? uploadResponse;
+  final double? facePercent;
+  final bool canSendAbsen;
+  final Map<String, dynamic>? cekModeData;
+  final bool isLoading;
+  final String nama;
+  final String email;
+  final String nip;
+  final String telp;
+  final String tempatTugas;
+  final String jabatan;
+  final String divisi;
+  final String avatarUrl;
+  final String idPegawai;
+  final String username;
+  final String avatar;
+
+  const CreateAvatarState({
+    this.isCameraReady = false,
+    this.imageFile,
+    this.currentPosition,
+    this.address,
+    this.uploadResponse,
+    this.facePercent,
+    this.canSendAbsen = false,
+    this.cekModeData,
+    this.isLoading = false,
+    this.nama = '',
+    this.email = '',
+    this.nip = '',
+    this.telp = '',
+    this.tempatTugas = '',
+    this.jabatan = '',
+    this.divisi = '',
+    this.avatarUrl = '',
+    this.idPegawai = '',
+    this.username = '',
+    this.avatar = '',
+  });
+
+  CreateAvatarState copyWith({
+    bool? isCameraReady,
+    XFile? imageFile,
+    Position? currentPosition,
+    String? address,
+    String? uploadResponse,
+    double? facePercent,
+    bool? canSendAbsen,
+    Map<String, dynamic>? cekModeData,
+    bool? isLoading,
+    String? nama,
+    String? email,
+    String? nip,
+    String? telp,
+    String? tempatTugas,
+    String? jabatan,
+    String? divisi,
+    String? avatarUrl,
+    String? idPegawai,
+    String? username,
+    String? avatar,
+  }) {
+    return CreateAvatarState(
+      isCameraReady: isCameraReady ?? this.isCameraReady,
+      imageFile: imageFile ?? this.imageFile,
+      currentPosition: currentPosition ?? this.currentPosition,
+      address: address ?? this.address,
+      uploadResponse: uploadResponse ?? this.uploadResponse,
+      facePercent: facePercent ?? this.facePercent,
+      canSendAbsen: canSendAbsen ?? this.canSendAbsen,
+      cekModeData: cekModeData ?? this.cekModeData,
+      isLoading: isLoading ?? this.isLoading,
+      nama: nama ?? this.nama,
+      email: email ?? this.email,
+      nip: nip ?? this.nip,
+      telp: telp ?? this.telp,
+      tempatTugas: tempatTugas ?? this.tempatTugas,
+      jabatan: jabatan ?? this.jabatan,
+      divisi: divisi ?? this.divisi,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      idPegawai: idPegawai ?? this.idPegawai,
+      username: username ?? this.username,
+      avatar: avatar ?? this.avatar,
+    );
+  }
+}
+
+class CreateAvatarNotifier extends Notifier<CreateAvatarState> {
+  @override
+  CreateAvatarState build() => const CreateAvatarState();
+
+  void setCameraReady(bool v) => state = state.copyWith(isCameraReady: v);
+  void setImage(XFile? f) => state = state.copyWith(imageFile: f);
+  void setCurrentPosition(Position? p) =>
+      state = state.copyWith(currentPosition: p);
+  void setAddress(String? a) => state = state.copyWith(address: a);
+  void setUploadResponse(String? r) =>
+      state = state.copyWith(uploadResponse: r);
+  void setFacePercent(double? p) => state = state.copyWith(facePercent: p);
+  void setCanSendAbsen(bool v) => state = state.copyWith(canSendAbsen: v);
+  void setCekModeData(Map<String, dynamic>? m) =>
+      state = state.copyWith(cekModeData: m);
+  void setIsLoading(bool v) => state = state.copyWith(isLoading: v);
+  void setProfileFields({
+    String? nama,
+    String? email,
+    String? nip,
+    String? telp,
+    String? tempatTugas,
+    String? jabatan,
+    String? divisi,
+    String? avatarUrl,
+    String? idPegawai,
+    String? username,
+    String? avatar,
+  }) {
+    state = state.copyWith(
+      nama: nama,
+      email: email,
+      nip: nip,
+      telp: telp,
+      tempatTugas: tempatTugas,
+      jabatan: jabatan,
+      divisi: divisi,
+      avatarUrl: avatarUrl,
+      idPegawai: idPegawai,
+      username: username,
+      avatar: avatar,
+    );
+  }
+}
+
+final createAvatarProvider =
+    NotifierProvider<CreateAvatarNotifier, CreateAvatarState>(
+      () => CreateAvatarNotifier(),
+    );
+
+class CreateAvatarPage extends ConsumerStatefulWidget {
   final Map<String, dynamic>? data;
   const CreateAvatarPage({super.key, this.data});
 
   @override
-  State<CreateAvatarPage> createState() => _CreateAvatarPageState();
+  ConsumerState<CreateAvatarPage> createState() => _CreateAvatarPageState();
 }
 
-class _CreateAvatarPageState extends State<CreateAvatarPage> {
+class _CreateAvatarPageState extends ConsumerState<CreateAvatarPage> {
   CameraController? _cameraController;
-  bool _isCameraReady = false;
-  XFile? _imageFile;
-  Position? _currentPosition;
-  String? _address;
-  String? _uploadResponse;
-  // ignore: unused_field
-  double? _facePercent;
-  bool _canSendAbsen = false;
-  Map<String, dynamic>? _cekModeData;
-
-  DateTime? _tanggalLahir;
-  DateTime? _tanggalBergabung;
-  // All fields are read-only now; no update-in-progress flag required.
-
-  // Data tambahan
-  String nip = '';
-  String jabatan = '';
-  String telp = '';
-  String tempatTugas = '';
-  String site = '';
-  String lokasi = '';
-  String divisi = '';
-  String nama = '';
-  String email = '';
-  String avatarUrl = '';
-
-  // General-purpose loading (used for operations like avatar upload)
-  bool isLoading = false;
-  // Network fetch flags: show CircularProgress only when these are true
-  // ignore: unused_field
-  bool _isFetchingProfile = false;
   // final bool _isFetchingJenis = false;
   // jenis aturan update
   // final String _selectedJenisAturan = '1';
@@ -80,37 +199,13 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _tryInitCamera();
-      await _getLocation();
-    });
-  }
-
-  Future<void> _tryInitCamera() async {
-    try {
-      final cameras = await availableCameras();
-      final front = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.isNotEmpty
-            ? cameras.first
-            : throw CameraException('NoCamera', 'No cameras found'),
+      _cameraController = await CameraUtil.tryInitCamera(
+        context,
+        () => ref.read(createAvatarProvider.notifier).setCameraReady(true),
       );
-      _cameraController = CameraController(front, ResolutionPreset.medium);
-      await _cameraController!.initialize();
-      if (!mounted) return;
-      setState(() => _isCameraReady = true);
-    } on CameraException catch (e) {
-      log('CameraException: ${e.code} ${e.description}');
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal akses kamera: ${e.code}')));
-    } catch (e) {
-      log('camera init error: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal inisialisasi kamera')));
-    }
+      await _getLocation();
+      await _loadPrefs();
+    });
   }
 
   Future<void> _getLocation() async {
@@ -127,7 +222,7 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
         ),
       );
       if (!mounted) return;
-      setState(() => _currentPosition = pos);
+      ref.read(createAvatarProvider.notifier).setCurrentPosition(pos);
       // resolve address in background
       _resolveAddress(pos);
     } catch (e) {
@@ -164,7 +259,7 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
         }
         final addr = parts.join(', ');
         if (!mounted) return;
-        setState(() => _address = addr);
+        ref.read(createAvatarProvider.notifier).setAddress(addr);
       }
     } catch (e) {
       log('reverse geocode error: $e');
@@ -256,18 +351,15 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
             Positioned.fill(
               child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
             ),
+
             // reduced overlay so background remains visible through frosted elements
-            Positioned.fill(
-              child: Container(
-                // subtle dark tint so content remains readable
-                color: Colors.black.withValues(alpha: 0.15),
-              ),
-            ),
             SafeArea(
               child: Column(
                 children: [
                   Expanded(
-                    child: _isCameraReady && _cameraController != null
+                    child:
+                        ref.watch(createAvatarProvider).isCameraReady &&
+                            _cameraController != null
                         ? Stack(
                             children: [
                               Positioned.fill(
@@ -327,30 +419,41 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                     color: Colors.black54,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: _currentPosition != null
+                                  child:
+                                      ref
+                                              .watch(createAvatarProvider)
+                                              .currentPosition !=
+                                          null
                                       ? Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              'Lat: ${_currentPosition!.latitude.toStringAsFixed(5)}',
+                                              'Lat: ${ref.watch(createAvatarProvider).currentPosition!.latitude.toStringAsFixed(5)}',
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 12,
                                               ),
                                             ),
                                             Text(
-                                              'Lon: ${_currentPosition!.longitude.toStringAsFixed(5)}',
+                                              'Lon: ${ref.watch(createAvatarProvider).currentPosition!.longitude.toStringAsFixed(5)}',
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 12,
                                               ),
                                             ),
-                                            if (_address != null)
+                                            if (ref
+                                                    .watch(createAvatarProvider)
+                                                    .address !=
+                                                null)
                                               SizedBox(
                                                 width: 180,
                                                 child: Text(
-                                                  _address!,
+                                                  ref
+                                                      .watch(
+                                                        createAvatarProvider,
+                                                      )
+                                                      .address!,
                                                   style: const TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 11,
@@ -368,7 +471,10 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                                   fontSize: 11,
                                                 ),
                                               ),
-                                            if (_uploadResponse != null)
+                                            if (ref
+                                                    .watch(createAvatarProvider)
+                                                    .uploadResponse !=
+                                                null)
                                               Padding(
                                                 padding: const EdgeInsets.only(
                                                   top: 6.0,
@@ -376,7 +482,11 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                                 child: SizedBox(
                                                   width: 180,
                                                   child: Text(
-                                                    _uploadResponse!,
+                                                    ref
+                                                        .watch(
+                                                          createAvatarProvider,
+                                                        )
+                                                        .uploadResponse!,
                                                     style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 10,
@@ -399,7 +509,8 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                 ),
                               ),
                               // thumbnail preview at bottom-left when image captured
-                              if (_imageFile != null)
+                              if (ref.watch(createAvatarProvider).imageFile !=
+                                  null)
                                 Positioned(
                                   left: 12,
                                   bottom: 24,
@@ -414,7 +525,12 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                             onTap: () =>
                                                 Navigator.of(context).pop(),
                                             child: Image.file(
-                                              File(_imageFile!.path),
+                                              File(
+                                                ref
+                                                    .watch(createAvatarProvider)
+                                                    .imageFile!
+                                                    .path,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -433,7 +549,12 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                       child: ClipRRect(
                                         borderRadius: BorderRadius.circular(6),
                                         child: Image.file(
-                                          File(_imageFile!.path),
+                                          File(
+                                            ref
+                                                .watch(createAvatarProvider)
+                                                .imageFile!
+                                                .path,
+                                          ),
                                           fit: BoxFit.cover,
                                         ),
                                       ),
@@ -441,7 +562,7 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                   ),
                                 ),
                               // show send button at bottom-right when allowed
-                              if (_canSendAbsen)
+                              if (ref.watch(createAvatarProvider).canSendAbsen)
                                 Positioned(
                                   right: 12,
                                   bottom: 24,
@@ -462,7 +583,8 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                 ),
 
                               // cek mode absen box at bottom-left (above thumbnail)
-                              if (_cekModeData != null)
+                              if (ref.watch(createAvatarProvider).cekModeData !=
+                                  null)
                                 Positioned(
                                   left: 12,
                                   bottom: 110,
@@ -481,33 +603,36 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          'next_mod: ${_cekModeData!['next_mod'] ?? ''}',
+                                          'next_mod: ${ref.watch(createAvatarProvider).cekModeData!['next_mod'] ?? ''}',
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 12,
                                           ),
                                         ),
                                         Text(
-                                          'jenis_aturan: ${_cekModeData!['jenis_aturan'] ?? ''}',
+                                          'jenis_aturan: ${ref.watch(createAvatarProvider).cekModeData!['jenis_aturan'] ?? ''}',
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 11,
                                           ),
                                         ),
                                         Text(
-                                          'status: ${_cekModeData!['status'] ?? ''}',
+                                          'status: ${ref.watch(createAvatarProvider).cekModeData!['status'] ?? ''}',
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 11,
                                           ),
                                         ),
-                                        if ((_cekModeData!['message'] ?? '')
+                                        if ((ref
+                                                    .watch(createAvatarProvider)
+                                                    .cekModeData!['message'] ??
+                                                '')
                                             .toString()
                                             .isNotEmpty)
                                           SizedBox(
                                             width: 180,
                                             child: Text(
-                                              '${_cekModeData!['message']}',
+                                              '${ref.watch(createAvatarProvider).cekModeData!['message']}',
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 11,
@@ -555,7 +680,7 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
     }
     try {
       final f = await _cameraController!.takePicture();
-      setState(() => _imageFile = f);
+      ref.read(createAvatarProvider.notifier).setImage(f);
       // Immediately upload the taken picture to faceapi endpoint
       try {
         await _uploadFace(File(f.path));
@@ -577,39 +702,36 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
   }
 
   Future<void> _uploadFace(File imageFile) async {
-    final uri = Uri.parse(
-      'https://absencobra.cbsguard.co.id/include/faceapi.php',
-    );
-
-    final request = http.MultipartRequest('POST', uri);
-    // Read saved user info from SharedPreferences if available; fall back to
-    // the temporary defaults otherwise.
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final idPegawai =
-          prefs.getString('id_pegawai') ?? prefs.getString('id_pegawai') ?? '1';
-      final usernamePref =
-          prefs.getString('username') ?? prefs.getString('user') ?? '1001';
-      final avatarPref = prefs.getString('avatar') ?? '';
-      request.fields['id_pegawai'] = idPegawai;
-      request.fields['username'] = usernamePref;
-      request.fields['avatar'] = avatarPref;
-      log(
-        'id_pegawai: $idPegawai, username: $usernamePref, avatar: $avatarPref',
-      );
-    } catch (e) {
-      log('prefs read error: $e');
-      request.fields['id_pegawai'] = '1';
-      request.fields['username'] = '1001';
-      request.fields['avatar'] = '';
+    // Get user data from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final userJson = prefs.getString('user');
+    User? user;
+    if (userJson != null) {
+      try {
+        user = User.fromJson(json.decode(userJson));
+      } catch (e) {
+        log('Error parsing user data in _uploadFace: $e');
+      }
     }
 
-    // Attach file as 'foto' field in jpg format
-    final multipartFile = await http.MultipartFile.fromPath(
-      'foto',
-      imageFile.path,
-    );
-    request.files.add(multipartFile);
+    if (user == null) {
+      // Fallback to defaults if user data not available
+      final idPegawaiPrefs = prefs.getString('id_pegawai') ?? '1';
+      final usernamePrefs = prefs.getString('username') ?? '1001';
+      final avatarPrefs = prefs.getString('avatar') ?? '';
+
+      user = User(
+        id_pegawai: int.tryParse(idPegawaiPrefs) ?? 1,
+        username: usernamePrefs,
+        nip: '1001',
+        id_jabatan: 0, // default value
+        id_tmpt: 0, // default value
+        id_cabang: 0, // default value
+        avatar: avatarPrefs,
+        jenis_aturan: '', // default value
+      );
+      log('User data not available, using fallback values from prefs');
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(
@@ -617,358 +739,265 @@ class _CreateAvatarPageState extends State<CreateAvatarPage> {
       ).showSnackBar(const SnackBar(content: Text('Mengunggah foto...')));
     }
 
-    final streamedResponse = await request.send();
-    final resp = await http.Response.fromStream(streamedResponse);
-
-    if (resp.statusCode == 200) {
-      // Try to parse JSON response if any
-      try {
-        final body = resp.body;
-        if (mounted) {
-          setState(() => _uploadResponse = body);
-          // try parse JSON and extract percent/confidence
-          try {
-            final parsed = json.decode(body);
-            double? pct;
-            if (parsed is Map) {
-              final raw =
-                  parsed['percent'] ??
-                  parsed['persen'] ??
-                  parsed['score'] ??
-                  parsed['match'] ??
-                  parsed['confidence'];
-              if (raw != null) {
-                pct = double.tryParse(raw.toString());
-              } else if (parsed['data'] != null) {
-                final d = parsed['data'];
-                if (d is Map) {
-                  final raw2 = d['percent'] ?? d['persen'] ?? d['confidence'];
-                  if (raw2 != null) pct = double.tryParse(raw2.toString());
-                }
-              }
-            }
-            if (pct != null) {
-              _facePercent = pct;
-              _canSendAbsen = pct >= 65.0;
-            }
-          } catch (e) {
-            log('parse upload response failed: $e');
-          }
-        }
-        log('upload response: $body');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Foto berhasil diunggah')),
-          );
-        }
-
-        // Refresh prefs and server profile, ensure avatar persisted before
-        // navigating to Absen page.
-        final saved = await _loadFromPrefsThenRefresh();
-        if (saved) {
-          _goToAbsenPage();
-        } else {
-          // If not saved yet, re-check once more; if still missing, inform user
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            final avatarNow = prefs.getString('avatar') ?? '';
-            if (avatarNow.isNotEmpty) {
-              _goToAbsenPage();
-            } else {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Avatar belum tersimpan. Mohon tunggu beberapa saat atau coba lagi.',
-                    ),
-                  ),
-                );
-              }
-            }
-          } catch (_) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Avatar belum tersimpan. Mohon tunggu beberapa saat atau coba lagi.',
-                  ),
-                ),
-              );
-            }
-          }
-        }
-      } catch (e) {
-        if (mounted) setState(() => _uploadResponse = 'Upload finished');
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Upload selesai')));
-        }
-      }
-    } else {
-      log('upload failed status: ${resp.statusCode} body: ${resp.body}');
-      if (mounted) {
-        setState(
-          () => _uploadResponse = 'Error ${resp.statusCode}: ${resp.body}',
-        );
-      }
-      throw Exception('Upload failed: ${resp.statusCode}');
-    }
-  }
-
-  Future<bool> _loadFromPrefsThenRefresh() async {
-    // Load prefs first (no spinner) so UI is responsive. Network refresh is
-    // indicated via _isFetchingProfile flag.
+    // Compress image before sending to FaceAPI
+    File? compressedFile;
     try {
-      final prefs = await SharedPreferences.getInstance();
-
-      // Load most commonly used fields from prefs (if present)
-      setState(() {
-        nama = prefs.getString('name') ?? prefs.getString('nama') ?? '';
-        email = prefs.getString('email') ?? '';
-        nip = prefs.getString('nip') ?? '';
-        telp = prefs.getString('telp') ?? '';
-        tempatTugas = prefs.getString('tmpt_tugas') ?? '';
-        jabatan = prefs.getString('jabatan') ?? '';
-        site = prefs.getString('site') ?? '';
-        lokasi = prefs.getString('lokasi') ?? '';
-        divisi = prefs.getString('divisi') ?? '';
-        // _alamatController.text = prefs.getString('alamat') ?? '';
-        avatarUrl = prefs.getString('avatar') ?? '';
-        // prefer local cached avatar if exists
-        final localAvatar = prefs.getString('avatar_lokal');
-        if (localAvatar != null && localAvatar.isNotEmpty) {
-          avatarUrl = localAvatar; // will be treated as file path
-        }
-      });
-
-      // Now attempt to refresh from server in background
-      final token = prefs.getString('token') ?? '';
-      if (token.isNotEmpty) {
-        _isFetchingProfile = true;
-        if (mounted) setState(() {});
-        try {
-          final response = await http.get(
-            Uri.parse('$kBaseApiUrl/profile.php'),
-            headers: {'Authorization': 'Bearer $token'},
-          );
-          if (response.statusCode == 200) {
-            final result = json.decode(response.body);
-            if (result['status'] == 'success') {
-              final data = result['data'];
-
-              // persist avatar and local cache similarly as before
-              try {
-                final rawAvatar = (data['avatar'] ?? '').toString();
-                await prefs.setString('avatar', rawAvatar);
-                final norm = _normalizeAvatarUrl(rawAvatar);
-                if (norm.isNotEmpty) {
-                  try {
-                    final resp = await http.get(Uri.parse(norm));
-                    if (resp.statusCode == 200) {
-                      final bytes = resp.bodyBytes;
-                      try {
-                        final localPath = await saveBytesToCacheAsImage(
-                          bytes,
-                          filename: null,
-                        );
-                        await prefs.setString('avatar_lokal', localPath);
-                        // prefer local avatar for immediate display
-                        if (mounted) setState(() => avatarUrl = localPath);
-                      } catch (e) {
-                        log('save avatar local failed: $e');
-                      }
-                    }
-                  } catch (e) {
-                    log('download avatar failed: $e');
-                  }
-                }
-              } catch (e) {
-                log('failed to save avatar to prefs: $e');
-              }
-
-              // update UI fields from server response
-              if (mounted) {
-                setState(() {
-                  nama = data['nama'] ?? nama;
-                  email = data['email'] ?? email;
-                  nip = data['nip'] ?? nip;
-                  telp = data['telp'] ?? telp;
-                  tempatTugas = data['tmpt_tugas'] ?? tempatTugas;
-                  jabatan = data['jabatan'] ?? jabatan;
-                  site = data['site'] ?? site;
-                  lokasi = data['lokasi'] ?? lokasi;
-                  divisi = data['divisi'] ?? divisi;
-                  // _alamatController.text =
-                  //     data['alamat'] ?? _alamatController.text;
-                  _tanggalLahir = data['tgl_lahir'] != null
-                      ? DateTime.tryParse(data['tgl_lahir'])
-                      : _tanggalLahir;
-                  _tanggalBergabung = data['tgl_joint'] != null
-                      ? DateTime.tryParse(data['tgl_joint'])
-                      : _tanggalBergabung;
-                });
-              }
-            }
-          }
-        } catch (e) {
-          log('refresh profile failed: $e');
-        } finally {
-          _isFetchingProfile = false;
-          if (mounted) setState(() {});
-        }
+      final targetPath = imageFile.path.replaceFirst('.jpg', '_compressed.jpg');
+      final xfile = await FlutterImageCompress.compressAndGetFile(
+        imageFile.path,
+        targetPath,
+        quality: 70,
+        minWidth: 300,
+        minHeight: 300,
+      );
+      if (xfile != null) {
+        compressedFile = File(xfile.path);
+      } else {
+        compressedFile = imageFile;
       }
     } catch (e) {
-      log('loadFromPrefs error: $e');
-    } finally {
-      if (mounted) setState(() => isLoading = false);
+      compressedFile = imageFile;
     }
+    final result = await FaceApiService.uploadFace(
+      imageFile: compressedFile,
+      user: user,
+    );
 
-    try {
-      final prefs2 = await SharedPreferences.getInstance();
-      final avatarNow = prefs2.getString('avatar') ?? '';
-      return avatarNow.isNotEmpty;
-    } catch (_) {
-      return false;
+    if (result != null) {
+      if (mounted) {
+        ref
+            .read(createAvatarProvider.notifier)
+            .setUploadResponse(result.response ?? '');
+        if (result.percent != null) {
+          ref
+              .read(createAvatarProvider.notifier)
+              .setFacePercent(result.percent);
+          ref
+              .read(createAvatarProvider.notifier)
+              .setCanSendAbsen(result.percent! >= 65.0);
+        }
+      }
+      log('upload response: ${result.response}');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Foto berhasil diunggah')));
+      }
+
+      // Load prefs and update local state
+      await _loadPrefs();
+      _goToAbsenPage();
+    } else {
+      if (mounted) {
+        ref
+            .read(createAvatarProvider.notifier)
+            .setUploadResponse('Upload failed');
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Upload gagal')));
+      }
     }
   }
 
-  String _normalizeAvatarUrl(String raw) {
-    if (raw.isEmpty) return '';
-    final s = raw.trim();
-    // If it's already a full URL, return as-is
-    if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  Future<User> _createUserFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final state = ref.read(createAvatarProvider);
+    return User(
+      id_pegawai: int.tryParse(state.idPegawai) ?? 1,
+      nama: state.nama,
+      nip: state.nip,
+      email: state.email,
+      username: state.username,
+      id_jabatan: 0, // default value
+      id_tmpt: int.tryParse(prefs.getString('id_tmpt') ?? '0') ?? 0,
+      divisi: state.divisi,
+      id_cabang: int.tryParse(prefs.getString('cabang') ?? '0') ?? 0,
+      avatar: state.avatar,
+      jenis_aturan: prefs.getString('jenis_aturan') ?? '',
+    );
+  }
 
-    // If server returned a path that already contains the avatar folder, but
-    // without host, normalize to full URL.
-    final avatarBase = 'https://panelcobra.cbsguard.co.id/assets/img/avatar/';
-    final cleaned = s.replaceFirst(RegExp(r'^/+'), '');
+  Future<void> _loadPrefs() async {
+    try {
+      // First load existing preferences
+      final map = await SharedPrefsUtil.loadAllPrefs();
+      final existingUser = await SharedPrefsUtil.loadUser();
 
-    // If the returned path already includes 'assets/img/avatar', just ensure
-    // it's an absolute URL using the panelcobra host.
-    if (cleaned.contains('assets/img/avatar')) {
-      final parts = cleaned.split(RegExp(r'assets/img/avatar'));
-      final filename = parts.isNotEmpty
-          ? parts.last.replaceFirst(RegExp(r'^/+'), '')
-          : cleaned;
-      return '$avatarBase$filename';
+      // Try to get fresh profile data from API
+      final profileResponse = await ProfileService.getProfile();
+
+      if (profileResponse != null &&
+          profileResponse.status == 'success' &&
+          profileResponse.data != null) {
+        final profileData = profileResponse.data!;
+
+        // Create updated user object with profile data
+        final updatedUser = User(
+          id_pegawai: profileData.id_pegawai,
+          nama: profileData.nama,
+          nip: profileData.nip,
+          username: profileData.username,
+          alamat: profileData.alamat,
+          tmpt_tugas: profileData.tmpt_tugas,
+          tgl_lahir: profileData.tgl_lahir,
+          divisi: profileData.divisi,
+          tgl_joint: profileData.tgl_joint,
+          avatar: profileData.avatar ?? '',
+          token: existingUser?.token, // Keep existing token
+          id_jabatan: existingUser?.id_jabatan ?? 0, // Keep existing or default
+          id_tmpt: existingUser?.id_tmpt ?? 0, // Keep existing or default
+          id_cabang: existingUser?.id_cabang ?? 0, // Keep existing or default
+          jenis_aturan:
+              existingUser?.jenis_aturan ??
+              'default', // Keep existing or default
+        );
+
+        // Save updated user to SharedPreferences
+        await SharedPrefsUtil.saveUser(updatedUser);
+
+        // Update specific preferences with profile data
+        if (profileData.avatar != null && profileData.avatar!.isNotEmpty) {
+          await SharedPrefsUtil.setPref('avatar', profileData.avatar!);
+        }
+        if (profileData.nama != null && profileData.nama!.isNotEmpty) {
+          await SharedPrefsUtil.setPref('nama', profileData.nama!);
+        }
+        if (profileData.divisi != null && profileData.divisi!.isNotEmpty) {
+          await SharedPrefsUtil.setPref('divisi', profileData.divisi!);
+        }
+        if (profileData.tmpt_tugas != null &&
+            profileData.tmpt_tugas!.isNotEmpty) {
+          await SharedPrefsUtil.setPref('tmpt_tugas', profileData.tmpt_tugas!);
+        }
+
+        // Update local state variables in provider
+        if (mounted) {
+          ref
+              .read(createAvatarProvider.notifier)
+              .setProfileFields(
+                nama: profileData.nama ?? '',
+                email: profileData.email ?? '',
+                nip: profileData.nip,
+                telp: profileData.telp ?? '',
+                tempatTugas: profileData.tmpt_tugas ?? '',
+                jabatan: profileData.jabatan ?? '',
+                divisi: profileData.divisi ?? '',
+                avatarUrl: profileData.avatar ?? '',
+                idPegawai: profileData.id_pegawai.toString(),
+                username: profileData.username,
+                avatar: profileData.avatar ?? '',
+              );
+        }
+
+        log('Profile data loaded and saved successfully');
+      } else {
+        // If profile API fails, use existing data
+        if (mounted && existingUser != null) {
+          ref
+              .read(createAvatarProvider.notifier)
+              .setProfileFields(
+                nama: existingUser.nama ?? '',
+                email: existingUser.email ?? '',
+                nip: existingUser.nip,
+                telp: map['telp'] as String? ?? '',
+                tempatTugas: map['tmpt_tugas'] as String? ?? '',
+                jabatan: map['jabatan'] as String? ?? '',
+                divisi: map['divisi'] as String? ?? '',
+                avatarUrl: existingUser.avatar,
+                idPegawai: existingUser.id_pegawai.toString(),
+                username: existingUser.username,
+                avatar: existingUser.avatar,
+              );
+        }
+        log(
+          'Using existing preference data (profile API failed or unavailable)',
+        );
+      }
+    } catch (e) {
+      log('Error loading preferences: $e');
+      // Fallback to basic defaults
+      if (mounted) {
+        ref
+            .read(createAvatarProvider.notifier)
+            .setProfileFields(
+              nama: '',
+              email: '',
+              nip: '',
+              telp: '',
+              tempatTugas: '',
+              jabatan: '',
+              divisi: '',
+              avatarUrl: '',
+              idPegawai: '1',
+              username: '1001',
+              avatar: '',
+            );
+      }
     }
-
-    // Otherwise assume the server returned just the filename or a relative
-    // path; prepend the avatar base URL.
-    return '$avatarBase$cleaned';
   }
 
   Future<void> _sendAbsen() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final idPegawai =
-          prefs.getString('id_pegawai') ?? prefs.getString('id_pegawai') ?? '1';
-      final username =
-          prefs.getString('username') ?? prefs.getString('user') ?? '1001';
-      final cabang = prefs.getString('cabang') ?? '0';
-      final jenisAturan =
-          (_cekModeData != null && _cekModeData!['jenis_aturan'] != null)
-          ? _cekModeData!['jenis_aturan'].toString()
-          : prefs.getString('jenis_aturan') ?? '';
-      final idTmpt =
-          prefs.getString('id_tmpt') ?? prefs.getString('idtmpt') ?? '0';
-      final avatar = prefs.getString('avatar') ?? '';
-
-      final lat = _currentPosition?.latitude.toString() ?? '';
-      final lon = _currentPosition?.longitude.toString() ?? '';
-
-      // tmpt_dikunjungi: try to inference from _cekModeData or send default list [1,2,3]
-      String tmptDikunjungi = '[]';
-      if (_cekModeData != null && _cekModeData!['tmpt_dikunjungi'] != null) {
-        tmptDikunjungi = _cekModeData!['tmpt_dikunjungi'].toString();
-      } else if (_cekModeData != null && _cekModeData!['tmpt'] != null) {
-        tmptDikunjungi = json.encode(_cekModeData!['tmpt']);
-      }
-      // if still empty or equals '[]', set default [1,2,3]
-      if (tmptDikunjungi.trim().isEmpty || tmptDikunjungi.trim() == '[]') {
-        tmptDikunjungi = json.encode([1, 2, 3]);
-      }
-
-      log(
-        "Preparing multipart absen masuk: id_pegawai=$idPegawai username=$username cabang=$cabang lat=$lat lon=$lon jenis_aturan=$jenisAturan id_tmpt=$idTmpt avatar=$avatar tmpt_dikunjungi=$tmptDikunjungi",
-      );
-
-      // Ensure photo exists
-      if (_imageFile == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Foto belum diambil')));
-        }
-        return;
-      }
-
-      final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/include/absenapi.php',
-      );
-      final request = http.MultipartRequest('POST', uri);
-
-      // Add expected form fields
-      request.fields['id_pegawai'] = idPegawai;
-      request.fields['username'] = username;
-      request.fields['cabang'] = cabang;
-      request.fields['latitude'] = lat;
-      request.fields['longitude'] = lon;
-      request.fields['jenis_aturan'] = jenisAturan;
-      request.fields['id_tmpt'] = idTmpt;
-      request.fields['avatar'] = avatar;
-      request.fields['tmpt_dikunjungi'] = tmptDikunjungi;
-
-      // Attach photo file as 'foto'
-      final mp = await http.MultipartFile.fromPath('foto', _imageFile!.path);
-      request.files.add(mp);
-
+    // Ensure photo exists
+    final state = ref.read(createAvatarProvider);
+    if (state.imageFile == null) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Mengirim absen...')));
+        ).showSnackBar(const SnackBar(content: Text('Foto belum diambil')));
       }
+      return;
+    }
 
-      final streamed = await request.send();
-      final resp = await http.Response.fromStream(streamed);
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Mengirim absen...')));
+    }
 
-      if (resp.statusCode == 200) {
-        try {
-          final parsed = json.decode(resp.body);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  parsed['message']?.toString() ?? 'Absen berhasil',
-                ),
-              ),
-            );
-          }
-          log('absen masuk response: ${resp.body}');
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Absen berhasil')));
-          }
-          log('absen masuk non-json response: ${resp.body}');
-        }
+    final user = await _createUserFromPrefs();
+    // Compress image before sending to backend
+    File? compressedFile;
+    try {
+      final targetPath = state.imageFile!.path.replaceFirst(
+        '.jpg',
+        '_compressed.jpg',
+      );
+      final xfile = await FlutterImageCompress.compressAndGetFile(
+        state.imageFile!.path,
+        targetPath,
+        quality: 70,
+        minWidth: 300,
+        minHeight: 300,
+      );
+      if (xfile != null) {
+        compressedFile = File(xfile.path);
       } else {
-        log('absen send failed ${resp.statusCode} ${resp.body}');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Gagal kirim absen: ${resp.statusCode}')),
-          );
-        }
+        compressedFile = File(state.imageFile!.path);
       }
     } catch (e) {
-      log('sendAbsen error: $e');
+      compressedFile = File(state.imageFile!.path);
+    }
+    final result = await AbsenMasukService.sendAbsen(
+      user: user,
+      position: state.currentPosition,
+      imageFile: compressedFile,
+      cekModeData: state.cekModeData,
+    );
+
+    if (result != null && result.error != null) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error mengirim absen: $e')));
+        ).showSnackBar(SnackBar(content: Text(result.error!)));
       }
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result?.message ?? 'Absen berhasil')),
+      );
+      _goToDashboard();
     }
   }
 }

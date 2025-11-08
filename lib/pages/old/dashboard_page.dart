@@ -1,7 +1,7 @@
-import 'package:absencobra/pages/patrol_page.dart';
-import 'package:absencobra/pages/shared_prefs_page.dart';
-import 'package:absencobra/pages/slip_gaji_page.dart';
-// import 'package:absencobra/providers/patrol_provider.dart';
+import 'package:cobra_apps/pages/patrol_page.dart';
+import 'package:cobra_apps/pages/shared_prefs_page.dart';
+import 'package:cobra_apps/pages/slip_gaji_page.dart';
+// import 'package:cobra_apps/providers/patrol_provider.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -126,20 +126,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           fit: StackFit.expand,
           children: [
             Positioned.fill(
-              child: Image.asset('assets/jpg/bg.jpg', fit: BoxFit.cover),
+              child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
             ),
             // reduced overlay so background remains visible through frosted elements
-            Positioned.fill(
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-                  child: Container(
-                    // subtle dark tint so content remains readable
-                    color: Colors.black.withValues(alpha: 0.12),
-                  ),
-                ),
-              ),
-            ),
+            // Positioned.fill(
+            //   child: ClipRect(
+            //     child: BackdropFilter(
+            //       filter: ui.ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+            //       child: Container(
+            //         // subtle dark tint so content remains readable
+            //         color: Colors.black.withValues(alpha: 0.12),
+            //       ),
+            //     ),
+            //   ),
+            // ),
             SafeArea(
               child: SingleChildScrollView(
                 physics: AlwaysScrollableScrollPhysics(),

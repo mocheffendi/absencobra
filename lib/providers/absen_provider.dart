@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../user.dart';
+import '../models/user.dart';
+import '../services/absen_service.dart';
 
 class AbsenData {
   final List<Map<String, String>> absensi7;
@@ -36,6 +37,15 @@ class AbsenNotifier extends Notifier<AbsenData> {
   @override
   AbsenData build() => const AbsenData(absensi7: []);
 
+  void reset() {
+    state = const AbsenData(
+      absensi7: [],
+      wktMasukToday: null,
+      wktPulangToday: null,
+      isLoading: false,
+    );
+  }
+
   Future<void> loadAbsenData() async {
     try {
       state = state.copyWith(isLoading: true);
@@ -62,103 +72,94 @@ class AbsenNotifier extends Notifier<AbsenData> {
         return;
       }
 
-      final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/api/get_tb_absen.php?id_pegawai=$idPegawai',
-      );
-      final r = await http.get(uri);
-      if (r.statusCode == 200) {
-        final body = json.decode(r.body);
-        List<dynamic> items = [];
-        if (body is Map && body['data'] is List) {
-          items = body['data'];
-        } else if (body is List) {
-          items = body;
-        } else if (body is Map) {
-          items = [body];
-        }
+      final rows = await AbsenService.getAbsenData(idPegawai);
+      // find today's masuk and pulang using the service helper
+      final todaysData = AbsenService.getTodaysAbsen(rows);
+      final todaysIn = todaysData?['in'];
+      final todaysOut = todaysData?['out'];
 
-        // Map to our simplified structure: tanggal (harimasuk), in (wktmasuk), out (wktpulang/wktkeluar)
-        final List<Map<String, String>> rows = items.map<Map<String, String>>((
-          it,
-        ) {
-          try {
-            final m = Map<String, dynamic>.from(it as Map);
-            String tanggalRaw = (m['harimasuk'] ?? m['tanggal'] ?? '')
-                .toString();
-            // Extract only date part (YYYY-MM-DD or DD-MM-YYYY)
-            String tanggalOnly = tanggalRaw.split(' ').first;
-            // Try to parse and reformat to DD-MM-YYYY
-            String tanggalFormatted = tanggalOnly;
-            try {
-              // Accept both YYYY-MM-DD and DD-MM-YYYY
+      // Determine most recent 7 days from the returned rows.
+      // Rows contain 'tanggal' in DD-MM-YYYY (or reformatted) as returned by AbsenService.
+      // We'll parse the date, sort descending by date, take up to 7 most recent unique dates,
+      // and then present them in chronological order (oldest -> newest) for UI display.
+      List<Map<String, String>> last7 = [];
+      try {
+        final parsed = rows
+            .map((r) {
+              final t = (r['tanggal'] ?? '').toString();
               DateTime? dt;
-              if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(tanggalOnly) ||
-                  tanggalOnly.contains('-')) {
-                // Try YYYY-MM-DD
-                dt = DateTime.tryParse(tanggalOnly);
-                if (dt == null && tanggalOnly.contains('-')) {
-                  // Try DD-MM-YYYY
-                  final parts = tanggalOnly.split('-');
-                  if (parts.length == 3) {
-                    dt = DateTime.tryParse(
-                      '${parts[2]}-${parts[1]}-${parts[0]}',
-                    );
+              // Try parse DD-MM-YYYY
+              try {
+                final parts = t.split('-');
+                if (parts.length == 3) {
+                  final dd = int.tryParse(parts[0]);
+                  final mm = int.tryParse(parts[1]);
+                  final yy = int.tryParse(parts[2]);
+                  if (dd != null && mm != null && yy != null) {
+                    dt = DateTime(yy, mm, dd);
                   }
                 }
+              } catch (_) {
+                dt = null;
               }
-              if (dt != null) {
-                tanggalFormatted =
-                    '${dt.day.toString().padLeft(2, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.year}';
+              // Fallback: try YYYY-MM-DD
+              if (dt == null) {
+                try {
+                  dt = DateTime.tryParse(t);
+                } catch (_) {
+                  dt = null;
+                }
               }
-            } catch (_) {}
-            final masuk =
-                (m['wktmasuk'] ?? m['jam_masuk'] ?? m['jammasuk'] ?? '')
-                    .toString();
-            final keluar =
-                (m['wktpulang'] ??
-                        m['wktkeluar'] ??
-                        m['jam_keluar'] ??
-                        m['jampulang'] ??
-                        '')
-                    .toString();
-            return {'tanggal': tanggalFormatted, 'in': masuk, 'out': keluar};
-          } catch (_) {
-            return {'tanggal': '', 'in': '', 'out': ''};
-          }
-        }).toList();
+              return {'row': r, 'date': dt};
+            })
+            .where((e) => e['date'] != null)
+            .toList();
 
-        // find today's masuk and pulang (compare date part, support DD-MM-YYYY & YYYY-MM-DD)
-        final today = DateTime.now();
-        final todayStr1 =
-            '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}'; // YYYY-MM-DD
-        final todayStr2 =
-            '${today.day.toString().padLeft(2, '0')}-${today.month.toString().padLeft(2, '0')}-${today.year}'; // DD-MM-YYYY
-        String? todaysIn;
-        String? todaysOut;
-        for (final r in rows) {
-          final t = r['tanggal'] ?? '';
-          if (t == todayStr1 || t == todayStr2) {
-            if ((r['in'] != null && r['in']!.isNotEmpty) && todaysIn == null) {
-              todaysIn = r['in'];
-            }
-            if ((r['out'] != null && r['out']!.isNotEmpty) &&
-                todaysOut == null) {
-              todaysOut = r['out'];
-            }
-            if (todaysIn != null && todaysOut != null) break;
+        // Sort by date descending (newest first)
+        parsed.sort(
+          (a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime),
+        );
+
+        // Keep unique dates (by formatted date string) and take up to 7
+        final seen = <String>{};
+        for (final e in parsed) {
+          final r = e['row'] as Map<String, String>;
+          final dateStr = r['tanggal'] ?? '';
+          if (!seen.contains(dateStr)) {
+            seen.add(dateStr);
+            last7.add(r);
+            if (last7.length >= 7) break;
           }
         }
 
+        // Present in chronological order oldest -> newest for the UI
+        last7 = last7.reversed.toList();
+      } catch (_) {
+        // If parsing fails for any reason, fall back to returning the raw rows (but this should be rare)
+        last7 = rows;
+      }
+
+      // Reset today's data first, then set new values
+      state = state.copyWith(
+        absensi7: last7,
+        wktMasukToday: null, // Reset first
+        wktPulangToday: null, // Reset first
+        isLoading: false,
+      );
+
+      // Then set today's data if available
+      if (todaysData != null) {
         state = state.copyWith(
-          absensi7: rows,
           wktMasukToday: todaysIn,
           wktPulangToday: todaysOut,
-          isLoading: false,
         );
-      } else {
-        state = state.copyWith(isLoading: false);
       }
+
+      log(
+        'AbsenProvider: State updated - absensi7 length: ${rows.length}, wktMasukToday: ${state.wktMasukToday}, wktPulangToday: ${state.wktPulangToday}',
+      );
     } catch (e) {
+      log('AbsenProvider: Error loading absen data: $e');
       state = state.copyWith(isLoading: false);
     }
   }

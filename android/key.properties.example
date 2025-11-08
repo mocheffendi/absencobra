@@ -1,0 +1,24 @@
+# Example key.properties for Android signing
+# Copy this file to `android/key.properties`, fill the values, and keep it OUT of version control.
+# Do NOT commit your real keystore or passwords.
+
+# Password for the keystore (store password)
+storePassword=YOUR_STORE_PASSWORD_HERE
+
+# Password for the key (key password) - can be same as storePassword
+keyPassword=YOUR_KEY_PASSWORD_HERE
+
+# Alias you chose when creating the keystore with keytool
+keyAlias=absencobra_key
+
+# Path to the keystore file relative to the android/ directory
+# If you created the keystore at android/app/keystore.jks, keep this value.
+storeFile=app/keystore.jks
+
+# Make sure android/key.properties and android/app/keystore.jks are ignored by git
+# by adding them to your .gitignore (an entry for key.properties is already included in the repo).
+
+# --- Usage ---
+# 1. Copy this file to android/key.properties and replace placeholders.
+# 2. Generate your keystore file (example below). Place it in android/app/keystore.jks or adjust storeFile.
+# 3. Add android/key.properties and android/app/keystore.jks to .gitignore.

@@ -1,91 +1,145 @@
-import 'package:absencobra/utility/settings.dart';
+import 'dart:developer';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:http/http.dart' as http;
+// network and settings are handled by services
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import '../user.dart';
+import '../models/user.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cobra_apps/services/patrol_service.dart';
+import 'package:cobra_apps/providers/patrol_provider.dart';
 
-class PatrolPhotoPage extends StatefulWidget {
+class PatrolPhotoState {
+  final File? imageFile;
+  final bool loading;
+  final String message;
+  final String? namaTmpt;
+  final bool loadingNama;
+  final bool namaValid;
+
+  const PatrolPhotoState({
+    this.imageFile,
+    this.loading = false,
+    this.message = '',
+    this.namaTmpt,
+    this.loadingNama = true,
+    this.namaValid = false,
+  });
+
+  PatrolPhotoState copyWith({
+    File? imageFile,
+    bool? loading,
+    String? message,
+    String? namaTmpt,
+    bool? loadingNama,
+    bool? namaValid,
+  }) {
+    return PatrolPhotoState(
+      imageFile: imageFile ?? this.imageFile,
+      loading: loading ?? this.loading,
+      message: message ?? this.message,
+      namaTmpt: namaTmpt ?? this.namaTmpt,
+      loadingNama: loadingNama ?? this.loadingNama,
+      namaValid: namaValid ?? this.namaValid,
+    );
+  }
+}
+
+class PatrolPhotoNotifier extends Notifier<PatrolPhotoState> {
+  @override
+  PatrolPhotoState build() => const PatrolPhotoState();
+
+  void setLoading(bool v) => state = state.copyWith(loading: v);
+  void setMessage(String m) => state = state.copyWith(message: m);
+  void setImage(File? f) => state = state.copyWith(imageFile: f);
+  void setNamaTmpt(String? n) => state = state.copyWith(namaTmpt: n);
+  void setLoadingNama(bool v) => state = state.copyWith(loadingNama: v);
+  void setNamaValid(bool v) => state = state.copyWith(namaValid: v);
+  void clear() => state = const PatrolPhotoState();
+}
+
+final patrolPhotoProvider =
+    NotifierProvider<PatrolPhotoNotifier, PatrolPhotoState>(
+      () => PatrolPhotoNotifier(),
+    );
+
+class PatrolPhotoPage extends ConsumerStatefulWidget {
   final String qrId;
   const PatrolPhotoPage({super.key, required this.qrId});
 
   @override
-  State<PatrolPhotoPage> createState() => _PatrolPhotoPageState();
+  ConsumerState<PatrolPhotoPage> createState() => _PatrolPhotoPageState();
 }
 
-class _PatrolPhotoPageState extends State<PatrolPhotoPage> {
+class _PatrolPhotoPageState extends ConsumerState<PatrolPhotoPage> {
   final TextEditingController _keteranganController = TextEditingController();
-  File? _imageFile;
-  bool _loading = false;
-  String _message = '';
-
-  String? namaTmpt;
-  bool loadingNama = true;
-  bool namaValid = false;
 
   @override
   void initState() {
     super.initState();
-    fetchNamaTmpt();
+    // Defer provider modifications until after the first frame so we don't
+    // attempt to write to providers while the widget tree is still building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      fetchNamaTmpt();
+    });
   }
 
   Future<void> fetchNamaTmpt() async {
-    setState(() {
-      loadingNama = true;
-      namaValid = false;
-      namaTmpt = null;
-      _message = '';
-    });
+    log('fetchNamaTmpt called');
+    // Outer guard to catch any synchronous exceptions that might occur before
+    // the inner network try/catch (helps debug why inner logs may not appear).
     try {
-      final response = await http.get(
-        Uri.parse('$kBaseApiUrl/cek_lokasi.php?qr_id=${widget.qrId}'),
-      );
-      final data = json.decode(response.body);
-      if (data['success'] == true) {
-        setState(() {
-          namaTmpt = data['nama_tmpt'];
-          namaValid = true;
-          loadingNama = false;
-        });
+      ref.read(patrolPhotoProvider.notifier).setLoadingNama(true);
+      ref.read(patrolPhotoProvider.notifier).setNamaValid(false);
+      ref.read(patrolPhotoProvider.notifier).setNamaTmpt(null);
+      ref.read(patrolPhotoProvider.notifier).setMessage('');
+
+      log('About to enter network try block');
+      // Use the centralized service for network logic.
+      final result = await fetchNamaTmptService(widget.qrId);
+      log('fetchNamaTmpt service result: $result');
+
+      if (result['success'] == true) {
+        ref.read(patrolPhotoProvider.notifier).setNamaTmpt(result['nama_tmpt']);
+        ref.read(patrolPhotoProvider.notifier).setNamaValid(true);
       } else {
-        setState(() {
-          namaTmpt = data['message'] ?? 'Lokasi tidak ditemukan';
-          namaValid = false;
-          loadingNama = false;
-        });
+        final msg = result['message']?.toString() ?? 'Lokasi tidak ditemukan';
+        ref.read(patrolPhotoProvider.notifier).setNamaTmpt(msg);
+        ref.read(patrolPhotoProvider.notifier).setNamaValid(false);
       }
-    } catch (e) {
-      setState(() {
-        namaTmpt = 'Gagal cek lokasi';
-        namaValid = false;
-        loadingNama = false;
-      });
+    } catch (e, st) {
+      // Catches synchronous errors before the network try block
+      log('fetchNamaTmpt outer error: $e');
+      log(st.toString());
+      ref.read(patrolPhotoProvider.notifier).setNamaTmpt('Gagal cek lokasi');
+      ref.read(patrolPhotoProvider.notifier).setNamaValid(false);
+    } finally {
+      // Ensure we always clear the loading flag so the spinner stops
+      ref.read(patrolPhotoProvider.notifier).setLoadingNama(false);
     }
   }
 
   Future<void> _pickImage() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.camera);
     if (picked != null) {
-      setState(() {
-        _imageFile = File(picked.path);
-      });
+      ref.read(patrolPhotoProvider.notifier).setImage(File(picked.path));
     }
   }
 
   Future<void> _submit() async {
-    if (_keteranganController.text.isEmpty || _imageFile == null) {
-      setState(() {
-        _message = "Keterangan dan foto wajib diisi";
-      });
+    final state = ref.read(patrolPhotoProvider);
+    if (_keteranganController.text.isEmpty || state.imageFile == null) {
+      ref
+          .read(patrolPhotoProvider.notifier)
+          .setMessage("Keterangan dan foto wajib diisi");
       return;
     }
 
-    setState(() {
-      _loading = true;
-      _message = '';
-    });
+    ref.read(patrolPhotoProvider.notifier).setLoading(true);
+    ref.read(patrolPhotoProvider.notifier).setMessage('');
 
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString('user');
@@ -94,46 +148,51 @@ class _PatrolPhotoPageState extends State<PatrolPhotoPage> {
       try {
         user = User.fromJson(json.decode(userJson));
       } catch (e) {
-        setState(() {
-          _message = "Data user tidak valid";
-        });
+        ref
+            .read(patrolPhotoProvider.notifier)
+            .setMessage("Data user tidak valid");
+        ref.read(patrolPhotoProvider.notifier).setLoading(false);
         return;
       }
     }
 
     if (user == null || user.token == null || user.token!.isEmpty) {
-      setState(() {
-        _message = "Token autentikasi tidak tersedia";
-      });
+      ref
+          .read(patrolPhotoProvider.notifier)
+          .setMessage("Token autentikasi tidak tersedia");
+      ref.read(patrolPhotoProvider.notifier).setLoading(false);
       return;
     }
 
     final token = user.token!;
 
-    var uri = Uri.parse('$kBaseApiUrl/patrol_api2.php');
-    var request = http.MultipartRequest('POST', uri)
-      ..fields['qr_id'] = widget.qrId
-      ..fields['keterangan'] = _keteranganController.text
-      ..headers['Authorization'] = 'Bearer $token';
-
-    request.files.add(
-      await http.MultipartFile.fromPath('foto1', _imageFile!.path),
+    final result = await uploadPatrolPhotoService(
+      qrId: widget.qrId,
+      keterangan: _keteranganController.text,
+      filePath: state.imageFile!.path,
+      token: token,
     );
 
-    var response = await request.send();
-    var respStr = await response.stream.bytesToString();
-    var data = json.decode(respStr);
+    ref.read(patrolPhotoProvider.notifier).setLoading(false);
+    ref
+        .read(patrolPhotoProvider.notifier)
+        .setMessage(result['message'] ?? 'Terjadi kesalahan');
 
-    setState(() {
-      _loading = false;
-      _message = data['message'] ?? 'Terjadi kesalahan';
-    });
-
-    if (data['success'] == true) {
+    if (result['success'] == true) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Patroli berhasil!")));
+      ).showSnackBar(SnackBar(content: const Text("Patroli berhasil!")));
+      // Reset provider state so the form is clean for the next patrol
+      try {
+        ref.read(patrolPhotoProvider.notifier).clear();
+        // Also ensure the global patrol provider stops processing so scanning
+        // continues correctly when user returns to the Patrol page.
+        try {
+          ref.read(patrolProvider.notifier).setProcessingScan(false);
+          ref.read(patrolProvider.notifier).setScanning(false);
+        } catch (_) {}
+      } catch (_) {}
       Navigator.pop(context, true); // agar dashboard refresh
     }
   }
@@ -141,26 +200,27 @@ class _PatrolPhotoPageState extends State<PatrolPhotoPage> {
   @override
   void dispose() {
     _keteranganController.dispose();
+    // Ensure provider state is cleared when the page is popped/back pressed
+    try {
+      ref.read(patrolPhotoProvider.notifier).clear();
+    } catch (_) {}
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(patrolPhotoProvider);
     return Scaffold(
-      appBar: AppBar(title: Text('Foto & Submit Patroli')),
+      appBar: AppBar(title: const Text('Foto & Submit Patroli')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: ListView(
           children: [
-            // Text(
-            //   'QR ID: ${widget.qrId}',
-            //   style: TextStyle(fontWeight: FontWeight.bold),
-            // ),
-            loadingNama
+            state.loadingNama
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Row(
-                      children: [
+                      children: const [
                         SizedBox(
                           width: 18,
                           height: 18,
@@ -174,37 +234,37 @@ class _PatrolPhotoPageState extends State<PatrolPhotoPage> {
                 : Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Text(
-                      namaTmpt != null
-                          ? 'Lokasi: $namaTmpt'
+                      state.namaTmpt != null
+                          ? 'Lokasi: ${state.namaTmpt}'
                           : 'Lokasi tidak ditemukan',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: namaValid ? Colors.green : Colors.red,
+                        color: state.namaValid ? Colors.green : Colors.red,
                       ),
                     ),
                   ),
             TextField(
               controller: _keteranganController,
-              decoration: InputDecoration(labelText: 'Keterangan'),
+              decoration: const InputDecoration(labelText: 'Keterangan'),
             ),
-            SizedBox(height: 16),
-            _imageFile == null
-                ? Text('Belum ada foto')
-                : Image.file(_imageFile!, height: 200),
+            const SizedBox(height: 16),
+            state.imageFile == null
+                ? const Text('Belum ada foto')
+                : Image.file(state.imageFile!, height: 200),
             ElevatedButton.icon(
               onPressed: _pickImage,
-              icon: Icon(Icons.camera_alt),
-              label: Text('Ambil Foto'),
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('Ambil Foto'),
             ),
-            SizedBox(height: 16),
-            _loading
-                ? Center(child: CircularProgressIndicator())
+            const SizedBox(height: 16),
+            state.loading
+                ? const Center(child: CircularProgressIndicator())
                 : ElevatedButton(
-                    onPressed: namaValid ? _submit : null,
-                    child: Text('Kirim Patroli'),
+                    onPressed: state.namaValid ? _submit : null,
+                    child: const Text('Kirim Patroli'),
                   ),
-            SizedBox(height: 16),
-            Text(_message, style: TextStyle(color: Colors.red)),
+            const SizedBox(height: 16),
+            Text(state.message, style: const TextStyle(color: Colors.red)),
           ],
         ),
       ),

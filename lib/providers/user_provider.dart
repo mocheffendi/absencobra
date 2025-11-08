@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:absencobra/user.dart';
+import 'package:cobra_apps/models/user.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 class UserNotifier extends Notifier<User?> {
   @override
@@ -10,3 +11,6 @@ class UserNotifier extends Notifier<User?> {
 }
 
 final userProvider = NotifierProvider<UserNotifier, User?>(UserNotifier.new);
+
+final prefsProvider = StateProvider<Map<String, Object?>>((ref) => {});
+final userPrefsProvider = StateProvider<User?>((ref) => null);

@@ -2,8 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:developer';
-import 'package:absencobra/utility/settings.dart';
-import '../user.dart';
+import 'package:cobra_apps/utility/settings.dart';
+import '../models/user.dart';
 
 // Model untuk slip gaji
 class SlipGajiData {
