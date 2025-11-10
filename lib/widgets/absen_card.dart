@@ -18,13 +18,37 @@ class AbsenCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (absenData.isLoading) {
+      return Container(
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Color.fromRGBO(255, 255, 255, 0.2),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.cyanAccent.withOpacity(0.7)),
+          ),
+          height: 135,
+          padding: const EdgeInsets.all(8),
+          child: const Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Container(
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.2),
+          color: Color.fromRGBO(255, 255, 255, 0.2),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.7)),
+          border: Border.all(color: Colors.cyanAccent.withOpacity(0.7)),
         ),
         height: 135,
         padding: const EdgeInsets.all(8),

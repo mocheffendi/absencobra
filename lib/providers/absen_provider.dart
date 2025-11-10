@@ -48,7 +48,15 @@ class AbsenNotifier extends Notifier<AbsenData> {
 
   Future<void> loadAbsenData() async {
     try {
-      state = state.copyWith(isLoading: true);
+      // Clear previous data immediately when starting a fresh load so
+      // stale `wktMasukToday` / `wktPulangToday` values don't remain
+      // visible if the API returns no data or an error occurs.
+      state = const AbsenData(
+        absensi7: [],
+        wktMasukToday: null,
+        wktPulangToday: null,
+        isLoading: true,
+      );
 
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString('user');
@@ -62,13 +70,25 @@ class AbsenNotifier extends Notifier<AbsenData> {
       }
 
       if (user == null) {
-        state = state.copyWith(isLoading: false);
+        // No user -> ensure we clear any previous absen values
+        state = state.copyWith(
+          absensi7: [],
+          wktMasukToday: null,
+          wktPulangToday: null,
+          isLoading: false,
+        );
         return;
       }
 
       final idPegawai = user.id_pegawai.toString();
       if (idPegawai.isEmpty) {
-        state = state.copyWith(isLoading: false);
+        // Invalid id -> clear previous values as well
+        state = state.copyWith(
+          absensi7: [],
+          wktMasukToday: null,
+          wktPulangToday: null,
+          isLoading: false,
+        );
         return;
       }
 
@@ -160,7 +180,13 @@ class AbsenNotifier extends Notifier<AbsenData> {
       );
     } catch (e) {
       log('AbsenProvider: Error loading absen data: $e');
-      state = state.copyWith(isLoading: false);
+      // On error, clear previous absen values to avoid showing stale data.
+      state = state.copyWith(
+        absensi7: [],
+        wktMasukToday: null,
+        wktPulangToday: null,
+        isLoading: false,
+      );
     }
   }
 }
