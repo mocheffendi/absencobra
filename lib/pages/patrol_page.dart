@@ -8,6 +8,7 @@ import 'package:camera/camera.dart';
 import 'package:cobra_apps/widgets/scanner_overlay2.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import '../providers/patrol_provider.dart';
+import 'package:cobra_apps/providers/camera_provider.dart';
 
 // Local provider to indicate camera initialization for this page
 class PatrolCameraInitNotifier extends Notifier<bool> {
@@ -29,7 +30,6 @@ class PatrolPage extends ConsumerStatefulWidget {
 }
 
 class _PatrolPageState extends ConsumerState<PatrolPage> {
-  CameraController? _cameraController;
   BarcodeScanner? _barcodeScanner;
 
   @override
@@ -39,51 +39,61 @@ class _PatrolPageState extends ConsumerState<PatrolPage> {
 
     // Get current location when page loads
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _initializeCamera();
+      // Initialize central camera provider
+      await ref.read(cameraProvider.notifier).initializeCamera();
+      // notify local page provider if needed
+      if (ref.read(cameraProvider) != null &&
+          ref.read(cameraProvider)!.value.isInitialized) {
+        ref.read(patrolCameraInitProvider.notifier).setInitialized(true);
+      }
+      // start scanning when camera is ready
+      await _startWhenReady();
       ref.read(patrolProvider.notifier).getCurrentLocation();
     });
   }
 
-  Future<void> _initializeCamera() async {
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) return;
-
-      // Use the first available camera (usually back camera)
-      _cameraController = CameraController(
-        cameras.first,
-        ResolutionPreset.high,
-        enableAudio: false,
-      );
-
-      await _cameraController!.initialize();
-      if (mounted) {
-        // mark camera initialized via local provider so UI can react without local setState
-        ref.read(patrolCameraInitProvider.notifier).setInitialized(true);
+  Future<void> _startWhenReady() async {
+    // Wait until provider's controller is available then start scanning
+    if (ref.read(cameraProvider) != null &&
+        ref.read(cameraProvider)!.value.isInitialized) {
+      _startBarcodeScanning();
+      return;
+    }
+    // Poll briefly until ready (small delay loop)
+    for (var i = 0; i < 10; i++) {
+      final c = ref.read(cameraProvider);
+      if (c != null && c.value.isInitialized) {
         _startBarcodeScanning();
+        return;
       }
-    } catch (e) {
-      debugPrint('Error initializing camera: $e');
+      await Future.delayed(const Duration(milliseconds: 200));
     }
   }
 
   void _startBarcodeScanning() {
     log('PatrolPage: Starting barcode scanning');
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    final controller = ref.read(cameraProvider);
+    if (controller == null || !controller.value.isInitialized) {
       return;
     }
 
     // Take picture periodically for barcode scanning
     Future.doWhile(() async {
       if (!mounted ||
-          _cameraController == null ||
-          !_cameraController!.value.isInitialized ||
+          ref.read(cameraProvider) == null ||
+          !ref.read(cameraProvider)!.value.isInitialized ||
           ref.read(processingScanProvider)) {
         return false;
       }
 
       try {
-        final XFile file = await _cameraController!.takePicture();
+        final XFile? file = await ref
+            .read(cameraProvider.notifier)
+            .takePicture();
+        if (file == null) {
+          await Future.delayed(const Duration(milliseconds: 300));
+          return true;
+        }
         final inputImage = InputImage.fromFilePath(file.path);
         final barcodes = await _barcodeScanner!.processImage(inputImage);
 
@@ -140,16 +150,14 @@ class _PatrolPageState extends ConsumerState<PatrolPage> {
   @override
   void reassemble() {
     super.reassemble();
-    if (_cameraController != null) {
-      _cameraController!.pausePreview();
-      _cameraController!.resumePreview();
-    }
+    // Use central camera provider to pause/resume preview (fire-and-forget)
+    ref.read(cameraProvider.notifier).pausePreview();
+    ref.read(cameraProvider.notifier).resumePreview();
   }
 
   @override
   Widget build(BuildContext context) {
     final patrolState = ref.watch(patrolProvider);
-    final isLoading = patrolState.isLoading;
     final currentAddress = patrolState.currentAddress;
     final currentPosition = patrolState.currentPosition;
 
@@ -174,7 +182,7 @@ class _PatrolPageState extends ConsumerState<PatrolPage> {
         toolbarHeight: 50,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true,
+        // centerTitle: true,
         title: const Text(
           "Patroli Scan QRCode",
           style: TextStyle(color: Colors.white),
@@ -182,138 +190,151 @@ class _PatrolPageState extends ConsumerState<PatrolPage> {
       ),
       body: Stack(
         children: [
+          // Camera preview
           Positioned.fill(
-            child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
+            child:
+                (ref.watch(cameraProvider) != null &&
+                    ref.watch(cameraProvider)!.value.isInitialized)
+                ? CameraPreview(ref.watch(cameraProvider)!)
+                : const Center(child: CircularProgressIndicator()),
           ),
-          Positioned.fill(
-            child: Container(color: Colors.black.withValues(alpha: 0.15)),
-          ),
-          SafeArea(
-            child: Stack(
-              children: [
-                // Camera preview
-                Column(
-                  children: [
-                    Expanded(
-                      flex: 4,
-                      child: Stack(
-                        children: [
-                          _cameraController != null &&
-                                  _cameraController!.value.isInitialized
-                              ? CameraPreview(_cameraController!)
-                              : const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                          // Scanner overlay on top of camera preview
-                          const Positioned.fill(child: QrisScannerAnimation()),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+          Positioned.fill(child: QrisScannerAnimation()),
 
-                // Top-left overlay for address and coordinates
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (currentAddress != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.6,
-                            ),
-                            child: Text(
-                              "Lokasi: $currentAddress",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                                fontSize: 13,
-                              ),
-                            ),
+          // Top-left overlay for address and coordinates
+          // Positioned(
+          //   top: 100,
+          //   left: 12,
+          //   child: Column(
+          //     crossAxisAlignment: CrossAxisAlignment.start,
+          //     children: [
+          //       if (currentAddress != null)
+          //         Container(
+          //           padding: const EdgeInsets.symmetric(
+          //             horizontal: 10,
+          //             vertical: 6,
+          //           ),
+          //           decoration: BoxDecoration(
+          //             color: Color.fromRGBO(255, 255, 255, 0.85),
+          //             borderRadius: BorderRadius.circular(8),
+          //           ),
+          //           child: ConstrainedBox(
+          //             constraints: BoxConstraints(
+          //               maxWidth: MediaQuery.of(context).size.width * 0.6,
+          //             ),
+          //             child: Text(
+          //               "Lokasi: $currentAddress",
+          //               style: const TextStyle(
+          //                 fontWeight: FontWeight.bold,
+          //                 color: Colors.black87,
+          //                 fontSize: 13,
+          //               ),
+          //             ),
+          //           ),
+          //         ),
+          //       if (currentPosition != null)
+          //         Container(
+          //           margin: const EdgeInsets.only(top: 6),
+          //           padding: const EdgeInsets.symmetric(
+          //             horizontal: 10,
+          //             vertical: 6,
+          //           ),
+          //           decoration: BoxDecoration(
+          //             color: Color.fromRGBO(255, 255, 255, 0.85),
+          //             borderRadius: BorderRadius.circular(8),
+          //           ),
+          //           child: Text(
+          //             "Lat: ${currentPosition.latitude.toStringAsFixed(6)}, Lng: ${currentPosition.longitude.toStringAsFixed(6)}",
+          //             style: const TextStyle(
+          //               fontWeight: FontWeight.bold,
+          //               color: Colors.black54,
+          //               fontSize: 13,
+          //             ),
+          //           ),
+          //         ),
+          //     ],
+          //   ),
+          // ),
+          Positioned(
+            left: 12,
+            top: 100,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: (currentAddress != null && currentPosition != null)
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Lat: ${currentPosition.latitude.toStringAsFixed(6)}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
                           ),
                         ),
-                      if (currentPosition != null)
-                        Container(
-                          margin: const EdgeInsets.only(top: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
+                        Text(
+                          'Long: ${currentPosition.longitude.toStringAsFixed(6)}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                        ),
+                        SizedBox(
+                          width: 180,
                           child: Text(
-                            "Lat: ${currentPosition.latitude.toStringAsFixed(6)}, Lng: ${currentPosition.longitude.toStringAsFixed(6)}",
+                            "Lokasi: $currentAddress",
                             style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black54,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // Bottom center camera-style Scan Ulang button
-                Positioned(
-                  bottom: 24,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: ClipOval(
-                      child: Material(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        child: InkWell(
-                          onTap: () {
-                            ref
-                                .read(patrolProvider.notifier)
-                                .setProcessingScan(false);
-                            ref
-                                .read(patrolProvider.notifier)
-                                .setScanning(false);
-                            ref
-                                .read(patrolProvider.notifier)
-                                .getCurrentLocation();
-                          },
-                          child: Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.12),
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt,
                               color: Colors.white,
+                              fontSize: 11,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                      ],
+                    )
+                  : const Text(
+                      'Mencari lokasi...',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
                     ),
-                  ),
-                ),
-              ],
             ),
           ),
-          if (isLoading)
-            Container(
-              color: Colors.black45,
-              child: const Center(child: CircularProgressIndicator()),
-            ),
+          // Bottom center camera-style Scan Ulang button
+          // Positioned(
+          //   bottom: 24,
+          //   left: 0,
+          //   right: 0,
+          //   child: Center(
+          //     child: ClipOval(
+          //       child: Material(
+          //         color: Color.fromRGBO(255, 255, 255, 0.12),
+          //         child: InkWell(
+          //           onTap: () {
+          //             ref
+          //                 .read(patrolProvider.notifier)
+          //                 .setProcessingScan(false);
+          //             ref.read(patrolProvider.notifier).setScanning(false);
+          //             ref.read(patrolProvider.notifier).getCurrentLocation();
+          //           },
+          //           child: Container(
+          //             width: 64,
+          //             height: 64,
+          //             decoration: BoxDecoration(
+          //               shape: BoxShape.circle,
+          //               border: Border.all(
+          //                 color: Color.fromRGBO(255, 255, 255, 0.12),
+          //               ),
+          //             ),
+          //             child: const Icon(Icons.camera_alt, color: Colors.white),
+          //           ),
+          //         ),
+          //       ),
+          //     ),
+          //   ),
+          // ),
         ],
       ),
     );
@@ -321,7 +342,7 @@ class _PatrolPageState extends ConsumerState<PatrolPage> {
 
   @override
   void dispose() {
-    _cameraController?.dispose();
+    // Do not dispose central CameraController here; managed by cameraProvider
     _barcodeScanner?.close();
     super.dispose();
   }

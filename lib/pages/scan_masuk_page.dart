@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cobra_apps/utility/settings.dart';
+import 'package:cobra_apps/widgets/scanner_overlay2.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
@@ -15,7 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cobra_apps/providers/page_providers.dart';
-import 'package:cobra_apps/widgets/scanner_overlay2.dart';
+// removed unused import 'scanner_overlay2' (unused)
 
 class ScanMasukPage extends ConsumerStatefulWidget {
   final Map<String, dynamic>? data;
@@ -40,6 +41,24 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
 
   @override
   void dispose() {
+    ref.read(scanMasukProvider.notifier).clear();
+
+    // Stop scanning and clear transient scan state when disposing the page
+    try {
+      ref.read(scanMasukProvider.notifier).setIsScanning(false);
+    } catch (_) {}
+    try {
+      ref.read(scanMasukProvider.notifier).setLastCode(null);
+      ref.read(scanMasukProvider.notifier).setQrValidationResult(null);
+      ref.read(scanMasukProvider.notifier).setValidationError(null);
+      ref.read(scanMasukProvider.notifier).setIsValidating(false);
+      ref.read(scanMasukProvider.notifier).setNavigated(false);
+      ref.read(scanMasukProvider.notifier).setQrLocation(null);
+      ref.read(scanMasukProvider.notifier).setDistanceMeters(null);
+    } catch (e) {
+      log('Error clearing scanMasukProvider state in dispose: $e');
+    }
+
     _cameraController?.dispose();
     _barcodeScanner?.close();
     super.dispose();
@@ -50,35 +69,41 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
     super.initState();
     _barcodeScanner = BarcodeScanner();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Move provider mutations here so we don't modify providers while
+      // the widget tree is building.
+      try {
+        ref.read(scanMasukProvider.notifier).setLastCode(null);
+        ref.read(scanMasukProvider.notifier).setQrValidationResult(null);
+        ref.read(scanMasukProvider.notifier).setValidationError(null);
+        ref.read(scanMasukProvider.notifier).setIsValidating(false);
+        ref.read(scanMasukProvider.notifier).setNavigated(false);
+        ref.read(scanMasukProvider.notifier).setQrLocation(null);
+        ref.read(scanMasukProvider.notifier).setDistanceMeters(null);
+        // start disabled then enable after a short delay to avoid immediate
+        // re-detection of the same QR when returning from Absen page
+        ref.read(scanMasukProvider.notifier).setIsScanning(false);
+        Future.delayed(const Duration(milliseconds: 300), () {
+          try {
+            ref.read(scanMasukProvider.notifier).setIsScanning(true);
+            log('scan_masuk_page: isScanning set to true by delayed postFrame');
+            if (_cameraController != null &&
+                _cameraController!.value.isInitialized) {
+              log(
+                'scan_masuk_page: camera initialized; starting barcode scanning after enabling isScanning',
+              );
+              _startBarcodeScanning();
+            }
+          } catch (e) {
+            log('Error enabling isScanning after delay: $e');
+          }
+        });
+      } catch (e) {
+        log('Error clearing scanMasukProvider state in initState: $e');
+      }
+
       await _initializeCamera();
       await _ensureAndGetLocation();
     });
-  }
-
-  Future<void> _ensureAndGetLocation() async {
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) return;
-      var p = await Geolocator.checkPermission();
-      if (p == LocationPermission.denied) {
-        p = await Geolocator.requestPermission();
-      }
-      if (p == LocationPermission.denied ||
-          p == LocationPermission.deniedForever) {
-        return;
-      }
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-      if (!mounted) return;
-      ref
-          .read(scanMasukProvider.notifier)
-          .setCurrentPosition(PositionData(pos.latitude, pos.longitude));
-      _resolveAddress(pos);
-    } catch (e) {
-      // ignore
-    }
   }
 
   Future<void> _resolveAddress(Position pos) async {
@@ -107,6 +132,32 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
       }
     } catch (e) {
       // ignore
+    }
+  }
+
+  Future<void> _ensureAndGetLocation() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      var p = await Geolocator.checkPermission();
+      if (p == LocationPermission.denied) {
+        p = await Geolocator.requestPermission();
+      }
+      if (p == LocationPermission.denied ||
+          p == LocationPermission.deniedForever) {
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      if (!mounted) return;
+      ref
+          .read(scanMasukProvider.notifier)
+          .setCurrentPosition(PositionData(pos.latitude, pos.longitude));
+      _resolveAddress(pos);
+    } catch (e) {
+      log('Error obtaining location: $e');
     }
   }
 
@@ -141,6 +192,7 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
     // Take picture periodically for barcode scanning
     Future.doWhile(() async {
       if (!mounted ||
+          !ref.read(scanMasukProvider).isScanning ||
           _cameraController == null ||
           !_cameraController!.value.isInitialized) {
         return false;
@@ -151,18 +203,31 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
         final inputImage = InputImage.fromFilePath(file.path);
         final barcodes = await _barcodeScanner!.processImage(inputImage);
 
+        final now = DateTime.now().millisecondsSinceEpoch;
         for (final barcode in barcodes) {
-          final code = barcode.rawValue;
-          if (code != null && code != ref.read(scanMasukProvider).lastCode) {
-            ref.read(scanMasukProvider.notifier).setLastCode(code);
-            log('Scanned QR Code: $code');
-            ref.read(scanMasukProvider.notifier).setIsValidating(true);
-            ref.read(scanMasukProvider.notifier).setQrValidationResult(null);
-            ref.read(scanMasukProvider.notifier).setValidationError(null);
+          final code = barcode.rawValue?.trim();
+          if (code == null || code.isEmpty) continue;
+          final state = ref.read(scanMasukProvider);
+          final last = state.lastCode;
+          final lastTs = state.lastCodeTimestamp ?? 0;
 
-            await _validateQRCode(code);
-            break; // Process only the first barcode found
+          // allow reprocessing same code if older than 2000 ms
+          if (code == last && (now - lastTs) < 2000) {
+            log(
+              'Skipping duplicate (recent) code: $code, age=${now - lastTs}ms',
+            );
+            continue;
           }
+
+          // Accept this code: set lastCode with timestamp atomically
+          ref.read(scanMasukProvider.notifier).setLastCodeWithTimestamp(code);
+          log('Scanned QR Code: $code');
+          ref.read(scanMasukProvider.notifier).setIsValidating(true);
+          ref.read(scanMasukProvider.notifier).setQrValidationResult(null);
+          ref.read(scanMasukProvider.notifier).setValidationError(null);
+
+          await _validateQRCode(code);
+          break; // Process only the first barcode found
         }
 
         // Delete the temporary file
@@ -222,6 +287,9 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
           if (maxDistance != null &&
               distance != null &&
               distance <= maxDistance) {
+            // Stop scanning before navigating to avoid race where scanner
+            // sets lastCode again after navigation
+            ref.read(scanMasukProvider.notifier).setIsScanning(false);
             ref.read(scanMasukProvider.notifier).setNavigated(true);
             if (!mounted) return;
             Navigator.of(context).pushReplacement(
@@ -257,7 +325,12 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
         }
       },
       child: Scaffold(
+        extendBody: true,
+        extendBodyBehindAppBar: true,
+        resizeToAvoidBottomInset: false,
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
+          backgroundColor: Colors.transparent,
           title: const Text('Scan Masuk'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
@@ -277,30 +350,11 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
 
                   // Scanner overlay sits above the camera preview but below UI overlays
                   Positioned.fill(child: const QrisScannerAnimation()),
-                  // QR Scanner overlay
-                  // Positioned.fill(
-                  //   child: Container(
-                  //     decoration: BoxDecoration(
-                  //       border: Border.all(color: Colors.white, width: 2),
-                  //       borderRadius: BorderRadius.circular(8),
-                  //     ),
-                  //     margin: const EdgeInsets.all(40),
-                  //     child: const Center(
-                  //       child: Text(
-                  //         'Position QR Code here',
-                  //         style: TextStyle(
-                  //           color: Colors.white,
-                  //           fontSize: 16,
-                  //           fontWeight: FontWeight.bold,
-                  //         ),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
+
                   // location overlay top-left + QR data + distance
                   Positioned(
                     left: 12,
-                    top: 12,
+                    top: 100,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -368,6 +422,40 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
                     bottom: 12,
                     child: Column(
                       children: [
+                        // Rescan button
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              try {
+                                final notifier = ref.read(
+                                  scanMasukProvider.notifier,
+                                );
+                                notifier.setLastCode(null);
+                                notifier.setQrValidationResult(null);
+                                notifier.setValidationError(null);
+                                notifier.setIsValidating(false);
+                                notifier.setIsScanning(true);
+                                log('User requested rescan (Scan Masuk)');
+                                if (_cameraController != null &&
+                                    _cameraController!.value.isInitialized) {
+                                  _startBarcodeScanning();
+                                }
+                              } catch (e) {
+                                log('Error during rescan (Scan Masuk): $e');
+                              }
+                            },
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('Scan Ulang'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
                         if (ref.watch(scanMasukProvider).lastCode != null)
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -570,6 +658,20 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
       await _cameraController?.pausePreview();
     } catch (_) {}
     if (!mounted) return;
+    // Clear QR validation-related transient state when leaving the page
+    try {
+      // stop scanning immediately
+      ref.read(scanMasukProvider.notifier).setIsScanning(false);
+      ref.read(scanMasukProvider.notifier).setLastCode(null);
+      ref.read(scanMasukProvider.notifier).setQrValidationResult(null);
+      ref.read(scanMasukProvider.notifier).setValidationError(null);
+      ref.read(scanMasukProvider.notifier).setIsValidating(false);
+      ref.read(scanMasukProvider.notifier).setNavigated(false);
+      ref.read(scanMasukProvider.notifier).setQrLocation(null);
+      ref.read(scanMasukProvider.notifier).setDistanceMeters(null);
+    } catch (e) {
+      log('Error clearing scanMasukProvider state on back: $e');
+    }
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const DashboardPage()),
       (route) => false,

@@ -1,5 +1,5 @@
 import 'dart:convert';
-// import 'dart:developer';
+import 'dart:developer';
 import 'dart:io';
 import 'dart:async';
 import 'package:cobra_apps/pages/dashboard_page.dart';
@@ -7,6 +7,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cobra_apps/providers/page_providers.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -74,6 +75,9 @@ class AbsenPulangNotifier extends Notifier<AbsenPulangState> {
   void setFacePercent(double? p) => state = state.copyWith(facePercent: p);
   void setFaceMessage(String? m) => state = state.copyWith(faceMessage: m);
   void setAvatarUrl(String? u) => state = state.copyWith(avatarUrl: u);
+
+  /// Reset transient AbsenPulang state (used when leaving the page)
+  void clear() => state = const AbsenPulangState();
 }
 
 final absenPulangProvider =
@@ -94,14 +98,29 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
 
   @override
   void dispose() {
+    // Ensure any shared scan transient state is cleared when AbsenPulangPage is disposed
+    try {
+      ref.read(scanPulangProvider.notifier).clear();
+    } catch (_) {}
     super.dispose();
   }
 
   void _goToDashboard() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => DashboardPage()),
+    log('AbsenPulangPage: _goToDashboard dipanggil');
+    // Clear any scan transient state when leaving AbsenPulang so scanner doesn't keep stale data when user returns.
+    try {
+      ref.read(scanPulangProvider.notifier).clear();
+    } catch (_) {}
+    // Clear AbsenPulang page transient state (image, messages, etc.)
+    try {
+      ref.read(absenPulangProvider.notifier).clear();
+    } catch (_) {}
+    log('AbsenPulangPage: navigating to Dashboard (root)');
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const DashboardPage()),
       (route) => false,
     );
+    log('AbsenPulangPage: navigation to Dashboard requested');
   }
 
   @override
@@ -429,6 +448,10 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
                               ref
                                   .read(absenPulangProvider.notifier)
                                   .setMessage('');
+                              // Also clear shared scan state so scanner restarts clean
+                              try {
+                                ref.read(scanPulangProvider.notifier).clear();
+                              } catch (_) {}
                             }
                           : null,
                       child:
@@ -448,6 +471,7 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
   }
 
   Future<void> _submit() async {
+    log('AbsenMasukPage: _submit dipanggil');
     final notifier = ref.read(absenPulangProvider.notifier);
     final state = ref.read(absenPulangProvider);
 
@@ -522,11 +546,12 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
       return;
     }
 
+    _goToDashboard();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result?.message ?? 'Absen berhasil')),
       );
-      _goToDashboard();
     }
   }
 }

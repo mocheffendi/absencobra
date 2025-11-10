@@ -39,6 +39,13 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
 
   @override
   void dispose() {
+    // Stop scanning and clear transient scan state when disposing the page
+    try {
+      ref.read(scanPulangProvider.notifier).clear();
+    } catch (e) {
+      log('Error clearing scanPulangProvider state in dispose: $e');
+    }
+
     _cameraController?.dispose();
     _barcodeScanner?.close();
     super.dispose();
@@ -47,8 +54,49 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
   @override
   void initState() {
     super.initState();
+    // Don't mutate providers while the widget tree is building.
+    // Move provider writes to a post-frame callback below.
     _barcodeScanner = BarcodeScanner();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Clear transient scan state and schedule enabling scanning
+      try {
+        final notifier = ref.read(scanPulangProvider.notifier);
+        notifier.setLastCode(null);
+        notifier.setQrValidationResult(null);
+        notifier.setIsScanning(false);
+        Future.delayed(const Duration(milliseconds: 300), () {
+          try {
+            notifier.setIsScanning(true);
+            log(
+              'scan_pulang_page: isScanning set to true by delayed postFrame',
+            );
+            // If camera already initialized, (re)start the scanning loop.
+            if (_cameraController != null &&
+                _cameraController!.value.isInitialized) {
+              log(
+                'scan_pulang_page: camera initialized; starting barcode scanning after enabling isScanning',
+              );
+              _startBarcodeScanning();
+            }
+          } catch (e) {
+            log('Error enabling isScanning after delay: $e');
+          }
+        });
+        notifier.setIsValidating(false);
+        notifier.setNavigated(false);
+        notifier.setQrLocation(null);
+        notifier.setDistanceMeters(null);
+        notifier.setIsScanning(false);
+        Future.delayed(const Duration(milliseconds: 300), () {
+          try {
+            notifier.setIsScanning(true);
+          } catch (e) {
+            log('Error enabling isScanning after delay: $e');
+          }
+        });
+      } catch (e) {
+        log('Error clearing scanPulangProvider state in postFrame: $e');
+      }
       await _initializeCamera();
       await _ensureAndGetLocation();
     });
@@ -68,7 +116,7 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
 
       await _cameraController!.initialize();
       if (mounted) {
-        ref.read(scanMasukProvider.notifier).setCameraInitialized(true);
+        ref.read(scanPulangProvider.notifier).setCameraInitialized(true);
         _startBarcodeScanning();
       }
     } catch (e) {
@@ -77,36 +125,72 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
   }
 
   void _startBarcodeScanning() {
+    log('Starting barcode scanning');
+
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      log('scan_pulang_page: camera not ready, skipping start');
       return;
     }
 
     // Take picture periodically for barcode scanning
     Future.doWhile(() async {
-      if (!mounted ||
-          _cameraController == null ||
-          !_cameraController!.value.isInitialized) {
+      final isScanning = ref.read(scanPulangProvider).isScanning;
+      final controllerReady =
+          _cameraController != null && _cameraController!.value.isInitialized;
+      if (!mounted || !isScanning || !controllerReady) {
+        log(
+          'scan_pulang_page: doWhile exit condition met - mounted=$mounted, isScanning=$isScanning, controllerReady=$controllerReady',
+        );
         return false;
       }
 
       try {
         final XFile file = await _cameraController!.takePicture();
+        // Diagnostics: log captured image path and size so we can inspect what ML Kit receives
+        try {
+          final f = File(file.path);
+          final len = await f.length();
+          log('Captured image: ${file.path}, size=$len bytes');
+        } catch (e) {
+          log('Failed to stat captured image: $e');
+        }
+
         final inputImage = InputImage.fromFilePath(file.path);
         final barcodes = await _barcodeScanner!.processImage(inputImage);
 
-        for (final barcode in barcodes) {
-          final code = barcode.rawValue;
-          final currentLast = ref.read(scanMasukProvider).lastCode;
-          if (code != null && code != currentLast) {
-            ref.read(scanMasukProvider.notifier).setLastCode(code);
-            log('Scanned QR Code: $code');
-            ref.read(scanMasukProvider.notifier).setIsValidating(true);
-            ref.read(scanMasukProvider.notifier).setQrValidationResult(null);
-            ref.read(scanMasukProvider.notifier).setValidationError(null);
+        log('Processing ${barcodes.length} barcodes');
 
-            await _validateQRCode(code);
-            break; // Process only the first barcode found
+        final now = DateTime.now().millisecondsSinceEpoch;
+        for (final barcode in barcodes) {
+          final code = barcode.rawValue?.trim();
+          if (code == null || code.isEmpty) {
+            log('Skipping empty/null barcode rawValue');
+            continue;
           }
+          final state = ref.read(scanPulangProvider);
+          final last = state.lastCode;
+          final lastTs = state.lastCodeTimestamp ?? 0;
+
+          log(
+            'Found barcode: rawValue=${barcode.rawValue}, trimmed="$code", type=${barcode.type}, currentLast=$last, lastTs=$lastTs',
+          );
+
+          if (code == last && (now - lastTs) < 2000) {
+            log(
+              'Skipping duplicate (recent) code: $code, age=${now - lastTs}ms',
+            );
+            continue;
+          }
+
+          // Accept this code and set timestamp atomically
+          ref.read(scanPulangProvider.notifier).setLastCodeWithTimestamp(code);
+          log('Scanned QR Code: $code');
+          ref.read(scanPulangProvider.notifier).setIsValidating(true);
+          ref.read(scanPulangProvider.notifier).setQrValidationResult(null);
+          ref.read(scanPulangProvider.notifier).setValidationError(null);
+
+          await _validateQRCode(code);
+          break; // Process only the first barcode found
         }
 
         // Delete the temporary file
@@ -171,20 +255,20 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
         }
 
         // update provider state instead of local setState
-        ref.read(scanMasukProvider.notifier).setQrValidationResult(data);
-        ref.read(scanMasukProvider.notifier).setIsValidating(false);
+        ref.read(scanPulangProvider.notifier).setQrValidationResult(data);
+        ref.read(scanPulangProvider.notifier).setIsValidating(false);
         if (data['success'] != true) {
           ref
-              .read(scanMasukProvider.notifier)
+              .read(scanPulangProvider.notifier)
               .setValidationError(
                 data['message']?.toString() ?? 'Invalid server response',
               );
         } else {
-          ref.read(scanMasukProvider.notifier).setValidationError(null);
+          ref.read(scanPulangProvider.notifier).setValidationError(null);
         }
 
         // --- AUTO NAVIGATE LOGIC ---
-        final providerState = ref.read(scanMasukProvider);
+        final providerState = ref.read(scanPulangProvider);
         if (!providerState.navigated && data['success'] == true) {
           double? maxDistance;
           if (data['max'] != null) {
@@ -212,7 +296,9 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
           if (maxDistance != null &&
               distance != null &&
               distance <= maxDistance) {
-            ref.read(scanMasukProvider.notifier).setNavigated(true);
+            // Stop scanning before navigating so old scan doesn't race back in
+            ref.read(scanPulangProvider.notifier).setIsScanning(false);
+            ref.read(scanPulangProvider.notifier).setNavigated(true);
             if (!mounted) return;
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => AbsenPulangPage(data: data)),
@@ -222,13 +308,13 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
         // --- END AUTO NAVIGATE LOGIC ---
       } else {
         ref
-            .read(scanMasukProvider.notifier)
+            .read(scanPulangProvider.notifier)
             .setValidationError('Status ${resp.statusCode}: ${resp.body}');
-        ref.read(scanMasukProvider.notifier).setIsValidating(false);
+        ref.read(scanPulangProvider.notifier).setIsValidating(false);
       }
     } catch (e) {
-      ref.read(scanMasukProvider.notifier).setValidationError('Error: $e');
-      ref.read(scanMasukProvider.notifier).setIsValidating(false);
+      ref.read(scanPulangProvider.notifier).setValidationError('Error: $e');
+      ref.read(scanPulangProvider.notifier).setIsValidating(false);
     }
   }
 
@@ -254,7 +340,7 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
         }
         final addr = parts.join(', ');
         if (!mounted) return;
-        ref.read(scanMasukProvider.notifier).setAddress(addr);
+        ref.read(scanPulangProvider.notifier).setAddress(addr);
       }
     } catch (e) {
       // ignore
@@ -279,7 +365,7 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
       );
       if (!mounted) return;
       ref
-          .read(scanMasukProvider.notifier)
+          .read(scanPulangProvider.notifier)
           .setCurrentPosition(PositionData(pos.latitude, pos.longitude));
       _resolveAddress(pos);
     } catch (e) {
@@ -289,7 +375,7 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(scanMasukProvider);
+    final state = ref.watch(scanPulangProvider);
 
     return PopScope(
       canPop: false, // Prevent automatic pop
@@ -310,332 +396,336 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
         appBar: AppBar(
           toolbarHeight: 50,
           backgroundColor: Colors.transparent,
+          title: const Text('Scan Pulang'),
           elevation: 0,
-          centerTitle: true,
-          // Use flexibleSpace to layer a frosted glass effect that blurs
-          // the background image beneath the AppBar, creating an acrylic look.
-          // flexibleSpace: ClipRect(
-          //   child: BackdropFilter(
-          //     filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-          //     child: Container(
-          //       color: Colors.white.withValues(
-          //         alpha: 0.12,
-          //       ), // tint over blurred bg
-          //     ),
-          //   ),
-          // ),
-          title: const Text(
-            'Scan Pulang',
-            style: TextStyle(color: Colors.white),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () async => await _goToDashboard(),
-          ),
-        ),
-        body: Stack(
-          children: [
-            Positioned.fill(
-              child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
-            ),
-            // reduced overlay so background remains visible through frosted elements
-            Positioned.fill(
-              child: Container(
-                // subtle dark tint so content remains readable
-                color: Colors.black.withValues(alpha: 0.15),
+          actions: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap: () async {
+                  if (_cameraController != null) {
+                    try {
+                      await _cameraController!.setFlashMode(
+                        _cameraController!.value.flashMode == FlashMode.off
+                            ? FlashMode.torch
+                            : FlashMode.off,
+                      );
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Flash toggled')),
+                      );
+                    } catch (e) {
+                      log('Error toggling flash: $e');
+                    }
+                  }
+                },
+                child: const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: Icon(Icons.flash_on, color: Colors.white, size: 24),
+                ),
               ),
             ),
-            SafeArea(
-              child: Column(
-                children: <Widget>[
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child:
-                              _cameraController != null &&
-                                  _cameraController!.value.isInitialized
-                              ? CameraPreview(_cameraController!)
-                              : const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                        ),
+          ],
+          // centerTitle: true,
+          // Keep the AppBar minimal and move the camera/overlay UI into Scaffold.body
+        ),
+        body: Column(
+          children: <Widget>[
+            Expanded(
+              child: Stack(
+                children: [
+                  // Camera preview or loading indicator
+                  Positioned.fill(
+                    child:
+                        _cameraController != null &&
+                            _cameraController!.value.isInitialized
+                        ? CameraPreview(_cameraController!)
+                        : const Center(child: CircularProgressIndicator()),
+                  ),
 
-                        // Scanner overlay sits above the camera preview but below UI overlays
-                        Positioned.fill(child: const QrisScannerAnimation()),
-                        // QR Scanner overlay
-                        // Positioned.fill(
-                        //   child: Container(
-                        //     decoration: BoxDecoration(
-                        //       border: Border.all(color: Colors.white, width: 2),
-                        //       borderRadius: BorderRadius.circular(8),
-                        //     ),
-                        //     margin: const EdgeInsets.all(40),
-                        //     child: const Center(
-                        //       child: Text(
-                        //         'Position QR Code here',
-                        //         style: TextStyle(
-                        //           color: Colors.white,
-                        //           fontSize: 16,
-                        //           fontWeight: FontWeight.bold,
-                        //         ),
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ),
-                        // location overlay top-left + QR data + distance
-                        Positioned(
-                          left: 12,
-                          top: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: state.currentPosition != null
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Lat: ${state.currentPosition!.latitude.toStringAsFixed(5)}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                        ),
+                  // Scanner overlay sits above the camera preview but below UI overlays
+                  Positioned.fill(child: const QrisScannerAnimation()),
+
+                  // location overlay top-left + QR data + distance
+                  Positioned(
+                    left: 12,
+                    top: 100,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: state.currentPosition != null
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Lat: ${state.currentPosition!.latitude.toStringAsFixed(5)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  'Lon: ${state.currentPosition!.longitude.toStringAsFixed(5)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if (state.address != null)
+                                  SizedBox(
+                                    width: 180,
+                                    child: Text(
+                                      state.address!,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
                                       ),
-                                      Text(
-                                        'Lon: ${state.currentPosition!.longitude.toStringAsFixed(5)}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      if (state.address != null)
-                                        SizedBox(
-                                          width: 180,
-                                          child: Text(
-                                            state.address!,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        )
-                                      else
-                                        const Text(
-                                          'Mencari alamat...',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      const SizedBox(height: 8),
-                                    ],
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   )
-                                : const Text(
-                                    'Mencari lokasi...',
+                                else
+                                  const Text(
+                                    'Mencari alamat...',
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: 12,
+                                      fontSize: 11,
                                     ),
                                   ),
+                                const SizedBox(height: 8),
+                              ],
+                            )
+                          : const Text(
+                              'Mencari lokasi...',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                    ),
+                  ),
+
+                  // Bottom-left overlays: rescan, qr data, validation results
+                  Positioned(
+                    left: 12,
+                    bottom: 12,
+                    child: Column(
+                      children: [
+                        // Rescan button
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              try {
+                                final notifier = ref.read(
+                                  scanPulangProvider.notifier,
+                                );
+                                notifier.setLastCode(null);
+                                notifier.setQrValidationResult(null);
+                                notifier.setValidationError(null);
+                                notifier.setIsValidating(false);
+                                notifier.setIsScanning(true);
+                                log('User requested rescan (Scan Pulang)');
+                                if (_cameraController != null &&
+                                    _cameraController!.value.isInitialized) {
+                                  _startBarcodeScanning();
+                                }
+                              } catch (e) {
+                                log('Error during rescan (Scan Pulang): $e');
+                              }
+                            },
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('Scan Ulang'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
                           ),
                         ),
-                        Positioned(
-                          left: 12,
-                          bottom: 12,
-                          child: Column(
+
+                        if (state.lastCode != null)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.start,
                             children: [
-                              if (state.lastCode != null)
-                                Column(
+                              Text(
+                                'QR Data: ${state.lastCode}',
+                                style: const TextStyle(
+                                  color: Colors.yellow,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if (state.qrLocation != null)
+                                Text(
+                                  'QR Lokasi: lat=${state.qrLocation!['lat']}, lon=${state.qrLocation!['lon']}',
+                                  style: const TextStyle(
+                                    color: Colors.cyanAccent,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              if (state.distanceMeters != null)
+                                Text(
+                                  'Jarak ke QR: ${state.distanceMeters!.toStringAsFixed(1)} meter',
+                                  style: const TextStyle(
+                                    color: Colors.orangeAccent,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              const SizedBox(height: 8),
+                              if (state.isValidating)
+                                const Text(
+                                  'Validasi QR...',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              if (state.validationError != null)
+                                Text(
+                                  state.validationError!,
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                        // validasi_qr result overlay kiri bawah
+                        if (state.qrValidationResult != null)
+                          Builder(
+                            builder: (context) {
+                              double? distance;
+                              final latStr = state
+                                  .qrValidationResult!['latitude']
+                                  ?.toString();
+                              final lonStr = state
+                                  .qrValidationResult!['longitude']
+                                  ?.toString();
+                              final lat = latStr != null
+                                  ? double.tryParse(latStr)
+                                  : null;
+                              final lon = lonStr != null
+                                  ? double.tryParse(lonStr)
+                                  : null;
+                              if (lat != null &&
+                                  lon != null &&
+                                  state.currentPosition != null) {
+                                distance = Geolocator.distanceBetween(
+                                  lat,
+                                  lon,
+                                  state.currentPosition!.latitude,
+                                  state.currentPosition!.longitude,
+                                );
+                              }
+                              return Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black38,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'QR Data: ${state.lastCode}',
-                                      style: const TextStyle(
-                                        color: Colors.yellow,
-                                        fontSize: 12,
+                                    const Text(
+                                      'Hasil Validasi QR:',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
                                       ),
                                     ),
-                                    if (state.qrLocation != null)
-                                      Text(
-                                        'QR Lokasi: lat=${state.qrLocation!['lat']}, lon=${state.qrLocation!['lon']}',
-                                        style: const TextStyle(
-                                          color: Colors.cyanAccent,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    if (state.distanceMeters != null)
-                                      Text(
-                                        'Jarak ke QR: ${state.distanceMeters!.toStringAsFixed(1)} meter',
-                                        style: const TextStyle(
-                                          color: Colors.orangeAccent,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    const SizedBox(height: 8),
-                                    if (state.isValidating)
-                                      const Text(
-                                        'Validasi QR...',
+                                    ...state.qrValidationResult!.entries.map(
+                                      (e) => Text(
+                                        '${e.key}: ${e.value}',
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: e.key == 'success'
+                                              ? (e.value == true
+                                                    ? Colors.greenAccent
+                                                    : Colors.redAccent)
+                                              : Colors.white,
+                                          fontWeight: e.key == 'success'
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
                                           fontSize: 12,
                                         ),
                                       ),
-                                    if (state.validationError != null)
-                                      Text(
-                                        state.validationError!,
-                                        style: const TextStyle(
-                                          color: Colors.redAccent,
-                                          fontSize: 12,
+                                    ),
+                                    if (distance != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          'Jarak ke lokasi validasi: ${distance.toStringAsFixed(1)} meter',
+                                          style: const TextStyle(
+                                            color: Colors.orangeAccent,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                   ],
                                 ),
-                              // validasi_qr result overlay kiri bawah
-                              if (state.qrValidationResult != null)
-                                Builder(
-                                  builder: (context) {
-                                    double? distance;
-                                    final latStr = state
-                                        .qrValidationResult!['latitude']
-                                        ?.toString();
-                                    final lonStr = state
-                                        .qrValidationResult!['longitude']
-                                        ?.toString();
-                                    final lat = latStr != null
-                                        ? double.tryParse(latStr)
-                                        : null;
-                                    final lon = lonStr != null
-                                        ? double.tryParse(lonStr)
-                                        : null;
-                                    if (lat != null &&
-                                        lon != null &&
-                                        state.currentPosition != null) {
-                                      distance = Geolocator.distanceBetween(
-                                        lat,
-                                        lon,
-                                        state.currentPosition!.latitude,
-                                        state.currentPosition!.longitude,
-                                      );
-                                    }
-                                    return Container(
-                                      margin: const EdgeInsets.only(top: 4),
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black38,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'Hasil Validasi QR:',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          ...state.qrValidationResult!.entries
-                                              .map(
-                                                (e) => Text(
-                                                  '${e.key}: ${e.value}',
-                                                  style: TextStyle(
-                                                    color: e.key == 'success'
-                                                        ? (e.value == true
-                                                              ? Colors
-                                                                    .greenAccent
-                                                              : Colors
-                                                                    .redAccent)
-                                                        : Colors.white,
-                                                    fontWeight:
-                                                        e.key == 'success'
-                                                        ? FontWeight.bold
-                                                        : FontWeight.normal,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                          if (distance != null)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 4,
-                                              ),
-                                              child: Text(
-                                                'Jarak ke lokasi validasi: ${distance.toStringAsFixed(1)} meter',
-                                                style: const TextStyle(
-                                                  color: Colors.orangeAccent,
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
-                            ],
+                              );
+                            },
                           ),
-                        ),
-                        // Flash button overlay top right
-                        Positioned(
-                          top: 12,
-                          right: 12,
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(24),
-                              onTap: () async {
-                                if (_cameraController != null) {
-                                  try {
-                                    await _cameraController!.setFlashMode(
-                                      _cameraController!.value.flashMode ==
-                                              FlashMode.off
-                                          ? FlashMode.torch
-                                          : FlashMode.off,
-                                    );
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Flash toggled'),
-                                      ),
-                                    );
-                                  } catch (e) {
-                                    log('Error toggling flash: $e');
-                                  }
-                                }
-                              },
-                              child: Ink(
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Padding(
-                                  padding: EdgeInsets.all(10),
-                                  child: Icon(
-                                    Icons.flash_on,
-                                    color: Colors.yellow,
-                                    size: 28,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
+
+                  // Flash button overlay top right
+                  // Positioned(
+                  //   top: 12,
+                  //   right: 12,
+                  //   child: Material(
+                  //     color: Colors.transparent,
+                  //     child: InkWell(
+                  //       borderRadius: BorderRadius.circular(24),
+                  //       onTap: () async {
+                  //         if (_cameraController != null) {
+                  //           try {
+                  //             await _cameraController!.setFlashMode(
+                  //               _cameraController!.value.flashMode ==
+                  //                       FlashMode.off
+                  //                   ? FlashMode.torch
+                  //                   : FlashMode.off,
+                  //             );
+                  //             if (!context.mounted) return;
+                  //             ScaffoldMessenger.of(context).showSnackBar(
+                  //               const SnackBar(content: Text('Flash toggled')),
+                  //             );
+                  //           } catch (e) {
+                  //             log('Error toggling flash: $e');
+                  //           }
+                  //         }
+                  //       },
+                  //       child: Ink(
+                  //         decoration: BoxDecoration(
+                  //           color: Colors.black54,
+                  //           shape: BoxShape.circle,
+                  //         ),
+                  //         child: const Padding(
+                  //           padding: EdgeInsets.all(10),
+                  //           child: Icon(
+                  //             Icons.flash_on,
+                  //             color: Colors.yellow,
+                  //             size: 28,
+                  //           ),
+                  //         ),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                 ],
               ),
             ),
@@ -646,6 +736,13 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
   }
 
   Future<void> _goToDashboard() async {
+    // Ensure camera and barcode scanner are disposed and clear transient scan state
+    try {
+      ref.read(scanPulangProvider.notifier).clear();
+    } catch (e) {
+      log('Error clearing scanPulangProvider state in _goToDashboard: $e');
+    }
+
     try {
       // stop camera first
       await _cameraController?.stopImageStream();

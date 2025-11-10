@@ -132,8 +132,8 @@ class AbsenNotifier extends Notifier<AbsenData> {
           }
         }
 
-        // Present in chronological order oldest -> newest for the UI
-        last7 = last7.reversed.toList();
+        // Present in order newest -> oldest so the most recent day appears at the top
+        // (do not reverse here; parsed was already sorted newest-first)
       } catch (_) {
         // If parsing fails for any reason, fall back to returning the raw rows (but this should be rare)
         last7 = rows;

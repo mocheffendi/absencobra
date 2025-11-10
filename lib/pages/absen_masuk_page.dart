@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 // import 'dart:developer';
 import 'dart:io';
 import 'dart:async';
@@ -17,6 +18,7 @@ import '../services/absen_masuk_service.dart';
 import '../services/location_service.dart';
 // import '../services/camera_util.dart';
 // import '../providers/face_api_provider.dart';
+import 'package:cobra_apps/providers/page_providers.dart';
 
 // AbsenMasuk page transient state
 class AbsenMasukState {
@@ -76,6 +78,9 @@ class AbsenMasukNotifier extends Notifier<AbsenMasukState> {
   void setFacePercent(double? p) => state = state.copyWith(facePercent: p);
   void setFaceMessage(String? m) => state = state.copyWith(faceMessage: m);
   void setAvatarUrl(String? u) => state = state.copyWith(avatarUrl: u);
+
+  /// Reset transient AbsenMasuk state (used when leaving the page)
+  void clear() => state = const AbsenMasukState();
 }
 
 final absenMasukProvider =
@@ -96,14 +101,58 @@ class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
 
   @override
   void dispose() {
+    // ref.read(scanMasukProvider.notifier).clear();
+    try {
+      ref.read(scanMasukProvider.notifier).clear();
+    } catch (_) {}
+
+    // Clear AbsenMasuk page transient state (image, messages, etc.)
+    try {
+      ref.read(absenMasukProvider.notifier).clear();
+    } catch (e) {
+      log('Error clearing absenMasukProvider state in _goToDashboard: $e');
+    }
+
+    // Stop scanning and clear transient scan state when disposing the page
+    // try {
+    //   ref.read(scanMasukProvider.notifier).setIsScanning(false);
+    // } catch (_) {}
+    // try {
+    //   ref.read(scanMasukProvider.notifier).setLastCode(null);
+    //   ref.read(scanMasukProvider.notifier).setQrValidationResult(null);
+    //   ref.read(scanMasukProvider.notifier).setValidationError(null);
+    //   ref.read(scanMasukProvider.notifier).setIsValidating(false);
+    //   ref.read(scanMasukProvider.notifier).setNavigated(false);
+    //   ref.read(scanMasukProvider.notifier).setQrLocation(null);
+    //   ref.read(scanMasukProvider.notifier).setDistanceMeters(null);
+    // } catch (e) {
+    //   log('Error clearing scanMasukProvider state in dispose: $e');
+    // }
     super.dispose();
   }
 
   void _goToDashboard() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => DashboardPage()),
+    log('AbsenMasukPage: _goToDashboard dipanggil');
+    // Clear scanMasuk transient state before leaving so QR data doesn't persist
+    try {
+      ref.read(scanMasukProvider.notifier).clear();
+    } catch (e) {
+      log('Error clearing scanMasukProvider state in _goToDashboard: $e');
+    }
+
+    // Clear AbsenMasuk page transient state (image, messages, etc.)
+    try {
+      ref.read(absenMasukProvider.notifier).clear();
+    } catch (e) {
+      log('Error clearing absenMasukProvider state in _goToDashboard: $e');
+    }
+
+    log('AbsenMasukPage: navigating to Dashboard (root)');
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const DashboardPage()),
       (route) => false,
     );
+    log('AbsenMasukPage: navigation to Dashboard requested');
   }
 
   @override
@@ -449,6 +498,7 @@ class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
   }
 
   Future<void> _submit() async {
+    log('AbsenMasukPage: _submit dipanggil');
     final notifier = ref.read(absenMasukProvider.notifier);
     final state = ref.read(absenMasukProvider);
 
@@ -515,11 +565,12 @@ class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
       return;
     }
 
+    _goToDashboard();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result?.message ?? 'Absen berhasil')),
       );
-      _goToDashboard();
     }
   }
 }

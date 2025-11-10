@@ -308,10 +308,14 @@ class PatrolNotifier extends Notifier<PatrolState> {
               .map((item) => PatrolData.fromJson(item))
               .toList();
 
-          log('Successfully loaded ${patrolList.length} patrol records');
+          // Sort by timestamp (newest first) and limit to the most recent 7 rows
+          patrolList.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          final limitedPatrolList = patrolList.take(7).toList();
+
+          log('Successfully loaded ${limitedPatrolList.length} patrol records (limited to 7)');
 
           state = state.copyWith(
-            patrolList: patrolList,
+            patrolList: limitedPatrolList,
             isLoading: false,
             error: null,
           );

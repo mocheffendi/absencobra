@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-
 // import 'package:cobra_apps/pages/shared_prefs_page.dart'; // unused
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,8 +49,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     // Load data sequentially to improve performance
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadUserFromPrefs();
-      await ref.read(patrolProvider.notifier).fetchPatrolHistory();
       await ref.read(absenProvider.notifier).loadAbsenData();
+      await ref.read(patrolProvider.notifier).fetchPatrolHistory();
       await _loadAvatarFromPrefs();
     });
   }
@@ -101,14 +100,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-  final user = ref.watch(userProvider);
-  final avatarPath = user?.avatar ?? '';
+    final user = ref.watch(userProvider);
+    final avatarPath = user?.avatar ?? '';
     final patrolState = ref.watch(patrolProvider);
     final patrolList = patrolState.patrolList;
     final isLoadingPatrol = patrolState.isLoading;
     final patrolError = patrolState.error;
     final absenData = ref.watch(absenProvider);
-    
 
     // Listen for user changes and reload/reset absen data when user changes
     ref.listen(authProvider, (previous, next) {
@@ -167,7 +165,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 backgroundColor: Colors.white,
                 foregroundImage: avatarPath.isNotEmpty
                     ? NetworkImage(
-                        'https://panelcobra.cbsguard.co.id/assets/img/avatar/$avatarPath')
+                        'https://panelcobra.cbsguard.co.id/assets/img/avatar/$avatarPath',
+                      )
                     : null,
                 child: avatarPath.isEmpty
                     ? Text(

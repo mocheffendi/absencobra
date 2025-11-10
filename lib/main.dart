@@ -81,18 +81,6 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
             Positioned.fill(
               child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
             ),
-            // Frosted glass overlay: blur the background image beneath the content
-            // Positioned.fill(
-            //   child: ClipRect(
-            //     child: BackdropFilter(
-            //       filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-            //       child: Container(
-            //         // subtle dark tint so content remains readable
-            //         color: Colors.black.withValues(alpha: 0.12),
-            //       ),
-            //     ),
-            //   ),
-            // ),
             const SafeArea(child: Center(child: CircularProgressIndicator())),
           ],
         ),
