@@ -25,7 +25,7 @@ class AbsenCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Color.fromRGBO(255, 255, 255, 0.2),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.cyanAccent.withOpacity(0.7)),
+            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.7)),
           ),
           height: 135,
           padding: const EdgeInsets.all(8),
@@ -48,7 +48,7 @@ class AbsenCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Color.fromRGBO(255, 255, 255, 0.2),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.cyanAccent.withOpacity(0.7)),
+          border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.7)),
         ),
         height: 135,
         padding: const EdgeInsets.all(8),

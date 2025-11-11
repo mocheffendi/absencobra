@@ -107,7 +107,7 @@ class _TestPageState extends ConsumerState<TestPage> {
         text += 'Barcode: ${barcode.rawValue}\n\n';
       }
       ref.read(testTextProvider.notifier).setText(text);
-      // TODO: set paint to draw boundingRect on top of image
+
       ref.read(testCustomPaintProvider.notifier).setPaint(null);
     }
     ref.read(testIsBusyProvider.notifier).setBusy(false);
