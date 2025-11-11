@@ -187,6 +187,38 @@ class _PatrolPageState extends ConsumerState<PatrolPage> {
           "Patroli Scan QRCode",
           style: TextStyle(color: Colors.white),
         ),
+        actions: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () async {
+                if (ref.watch(cameraProvider) != null) {
+                  try {
+                    await ref
+                        .watch(cameraProvider)!
+                        .setFlashMode(
+                          ref.watch(cameraProvider)!.value.flashMode ==
+                                  FlashMode.off
+                              ? FlashMode.torch
+                              : FlashMode.off,
+                        );
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Flash toggled')),
+                    );
+                  } catch (e) {
+                    log('Error toggling flash: $e');
+                  }
+                }
+              },
+              child: const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(Icons.flash_on, color: Colors.white, size: 24),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Stack(
         children: [

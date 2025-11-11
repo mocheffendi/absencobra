@@ -336,6 +336,35 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
             icon: const Icon(Icons.arrow_back),
             onPressed: () async => await _goToDashboard(),
           ),
+          actions: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap: () async {
+                  if (_cameraController != null) {
+                    try {
+                      await _cameraController!.setFlashMode(
+                        _cameraController!.value.flashMode == FlashMode.off
+                            ? FlashMode.torch
+                            : FlashMode.off,
+                      );
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Flash toggled')),
+                      );
+                    } catch (e) {
+                      log('Error toggling flash: $e');
+                    }
+                  }
+                },
+                child: const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: Icon(Icons.flash_on, color: Colors.white, size: 24),
+                ),
+              ),
+            ),
+          ],
         ),
         body: Column(
           children: <Widget>[
@@ -600,48 +629,48 @@ class _ScanMasukPageState extends ConsumerState<ScanMasukPage> {
                     ),
                   ),
                   // Flash button overlay top right
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(24),
-                        onTap: () async {
-                          if (_cameraController != null) {
-                            try {
-                              await _cameraController!.setFlashMode(
-                                _cameraController!.value.flashMode ==
-                                        FlashMode.off
-                                    ? FlashMode.torch
-                                    : FlashMode.off,
-                              );
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Flash toggled')),
-                              );
-                            } catch (e) {
-                              log('Error toggling flash: $e');
-                            }
-                          }
-                        },
-                        child: Ink(
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Padding(
-                            padding: EdgeInsets.all(10),
-                            child: Icon(
-                              Icons.flash_on,
-                              color: Colors.yellow,
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  // Positioned(
+                  //   top: 12,
+                  //   right: 12,
+                  //   child: Material(
+                  //     color: Colors.transparent,
+                  //     child: InkWell(
+                  //       borderRadius: BorderRadius.circular(24),
+                  //       onTap: () async {
+                  //         if (_cameraController != null) {
+                  //           try {
+                  //             await _cameraController!.setFlashMode(
+                  //               _cameraController!.value.flashMode ==
+                  //                       FlashMode.off
+                  //                   ? FlashMode.torch
+                  //                   : FlashMode.off,
+                  //             );
+                  //             if (!context.mounted) return;
+                  //             ScaffoldMessenger.of(context).showSnackBar(
+                  //               const SnackBar(content: Text('Flash toggled')),
+                  //             );
+                  //           } catch (e) {
+                  //             log('Error toggling flash: $e');
+                  //           }
+                  //         }
+                  //       },
+                  //       child: Ink(
+                  //         decoration: BoxDecoration(
+                  //           color: Colors.black54,
+                  //           shape: BoxShape.circle,
+                  //         ),
+                  //         child: const Padding(
+                  //           padding: EdgeInsets.all(10),
+                  //           child: Icon(
+                  //             Icons.flash_on,
+                  //             color: Colors.yellow,
+                  //             size: 28,
+                  //           ),
+                  //         ),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                 ],
               ),
             ),

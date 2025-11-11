@@ -45,5 +45,25 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikasi memerlukan akses kamera untuk mengambil gambar.</string>
+
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Aplikasi memerlukan akses mikrofon untuk merekam audio.</string>
+
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Aplikasi memerlukan lokasi saat digunakan.</string>
+
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Aplikasi memerlukan lokasi bahkan saat berjalan di latar belakang.</string>
+
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Aplikasi menggunakan lokasi Anda untuk menampilkan posisi secara akurat.</string>
+
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aplikasi memerlukan akses ke galeri foto untuk memilih atau menyimpan gambar.</string>
+
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Aplikasi memerlukan izin untuk menyimpan file ke galeri.</string>
 </dict>
 </plist>
