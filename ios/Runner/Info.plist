@@ -54,8 +54,8 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Aplikasi memerlukan lokasi saat digunakan.</string>
 
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Aplikasi memerlukan lokasi bahkan saat berjalan di latar belakang.</string>
+	<!-- <key>NSLocationAlwaysUsageDescription</key>
+	<string>Aplikasi memerlukan lokasi bahkan saat berjalan di latar belakang.</string> -->
 
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Aplikasi menggunakan lokasi Anda untuk menampilkan posisi secara akurat.</string>
