@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 // import 'package:cobra_apps/pages/shared_prefs_page.dart'; // unused
+import 'package:cobra_apps/providers/lembur_provider.dart';
+import 'package:cobra_apps/widgets/dashboard_table_lembur.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +11,7 @@ import 'package:cobra_apps/pages/patrol_page.dart';
 import 'package:cobra_apps/pages/account_setting_page.dart';
 import 'package:cobra_apps/pages/patrol_image_preview_page.dart';
 import 'package:cobra_apps/pages/slip_gaji_page.dart';
+import 'package:cobra_apps/pages/lembur_page.dart';
 
 import 'package:cobra_apps/utility/getinitials.dart';
 import 'package:cobra_apps/utility/settings.dart';
@@ -50,6 +53,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadUserFromPrefs();
       await ref.read(absenProvider.notifier).loadAbsenData();
+      await ref.read(lemburProvider.notifier).loadLemburData();
       await ref.read(patrolProvider.notifier).fetchPatrolHistory();
       await _loadAvatarFromPrefs();
     });
@@ -88,6 +92,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       // Then load absen data
       await ref.read(absenProvider.notifier).loadAbsenData();
 
+      // Then load lembur data
+      await ref.read(lemburProvider.notifier).loadLemburData();
+
       // Load patrol data first (most important for dashboard)
       await ref.read(patrolProvider.notifier).fetchPatrolHistory();
 
@@ -107,6 +114,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final isLoadingPatrol = patrolState.isLoading;
     final patrolError = patrolState.error;
     final absenData = ref.watch(absenProvider);
+    final lemburData = ref.watch(lemburProvider);
 
     // Listen for user changes and reload/reset absen data when user changes
     ref.listen(authProvider, (previous, next) {
@@ -277,6 +285,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                 ),
                               ),
                             ),
+                            DashboardMenu(
+                              icon: Icons.access_time,
+                              label: "Lembur",
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const LemburPage(),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -338,6 +356,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         title: "Absensi 7 Hari Terakhir",
                         headers: ["Tanggal", "In", "Out"],
                         absenData: absenData,
+                      ),
+
+                      DashboardTableLembur(
+                        title: "Absensi lembur 7 Hari Terakhir",
+                        headers: ["Tanggal", "In", "Out"],
+                        lemburData: lemburData,
                       ),
 
                       // Data Patroli Anggota - frosted to match app style

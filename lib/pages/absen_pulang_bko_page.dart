@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'dart:io';
 import 'dart:async';
 import 'package:cobra_apps/pages/dashboard_page.dart';
+import 'package:cobra_apps/services/absen_keluar_bko_service.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +15,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/user.dart';
 import '../services/face_api_service.dart';
-import '../services/absen_keluar_service.dart';
 import '../services/location_service.dart';
 
 // AbsenPulang page transient state
@@ -85,20 +85,20 @@ final absenPulangProvider =
       () => AbsenPulangNotifier(),
     );
 
-class AbsenPulangPage extends ConsumerStatefulWidget {
+class AbsenPulangBkoPage extends ConsumerStatefulWidget {
   final Map<String, dynamic>? data;
-  const AbsenPulangPage({super.key, this.data});
+  const AbsenPulangBkoPage({super.key, this.data});
 
   @override
-  ConsumerState<AbsenPulangPage> createState() => _AbsenPulangPageState();
+  ConsumerState<AbsenPulangBkoPage> createState() => _AbsenPulangBkoPageState();
 }
 
-class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
+class _AbsenPulangBkoPageState extends ConsumerState<AbsenPulangBkoPage> {
   Future<void> _initCamera() async {}
 
   @override
   void dispose() {
-    // Ensure any shared scan transient state is cleared when AbsenPulangPage is disposed
+    // Ensure any shared scan transient state is cleared when AbsenPulangBkoPage is disposed
     try {
       ref.read(scanPulangProvider.notifier).clear();
     } catch (_) {}
@@ -106,7 +106,7 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
   }
 
   void _goToDashboard() {
-    log('AbsenPulangPage: _goToDashboard dipanggil');
+    log('AbsenPulangBkoPage: _goToDashboard dipanggil');
     // Clear any scan transient state when leaving AbsenPulang so scanner doesn't keep stale data when user returns.
     try {
       ref.read(scanPulangProvider.notifier).clear();
@@ -115,12 +115,12 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
     try {
       ref.read(absenPulangProvider.notifier).clear();
     } catch (_) {}
-    log('AbsenPulangPage: navigating to Dashboard (root)');
+    log('AbsenPulangBkoPage: navigating to Dashboard (root)');
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const DashboardPage()),
       (route) => false,
     );
-    log('AbsenPulangPage: navigation to Dashboard requested');
+    log('AbsenPulangBkoPage: navigation to Dashboard requested');
   }
 
   @override
@@ -532,9 +532,9 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
       idAbsen = prefs.getString('id_absen');
     }
 
-    log('[AbsenPulang] idAbsen: $idAbsen');
+    log('[AbsenPulangBko] idAbsen: $idAbsen');
 
-    final result = await AbsenKeluarService.sendAbsen(
+    final result = await AbsenKeluarBkoService.sendAbsen(
       user: user,
       position: state.currentPosition,
       imageFile: compressedFile ?? state.imageFile!,

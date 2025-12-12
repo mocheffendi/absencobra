@@ -78,7 +78,7 @@ class FaceApiService {
         );
       }
     } catch (e) {
-      log('upload error: $e');
+      log('[FaceApiService] upload error: $e');
       return FaceApiResponse(error: 'Upload error: $e');
     }
   }

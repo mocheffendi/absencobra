@@ -1,24 +1,27 @@
 import 'dart:convert';
 import 'dart:developer';
+// import 'dart:developer';
 import 'dart:io';
 import 'dart:async';
 import 'package:cobra_apps/pages/dashboard_page.dart';
+import 'package:cobra_apps/services/absen_masuk_bko_service.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cobra_apps/providers/page_providers.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/user.dart';
 import '../services/face_api_service.dart';
-import '../services/absen_keluar_service.dart';
 import '../services/location_service.dart';
+// import '../services/camera_util.dart';
+// import '../providers/face_api_provider.dart';
+import 'package:cobra_apps/providers/page_providers.dart';
 
-// AbsenPulang page transient state
-class AbsenPulangState {
+// AbsenMasuk page transient state
+class AbsenMasukState {
   final File? imageFile;
   final bool loading;
   final String message;
@@ -28,7 +31,7 @@ class AbsenPulangState {
   final String? faceMessage;
   final String? avatarUrl;
 
-  const AbsenPulangState({
+  const AbsenMasukState({
     this.imageFile,
     this.loading = false,
     this.message = '',
@@ -39,7 +42,7 @@ class AbsenPulangState {
     this.avatarUrl,
   });
 
-  AbsenPulangState copyWith({
+  AbsenMasukState copyWith({
     File? imageFile,
     bool? loading,
     String? message,
@@ -49,7 +52,7 @@ class AbsenPulangState {
     String? faceMessage,
     String? avatarUrl,
   }) {
-    return AbsenPulangState(
+    return AbsenMasukState(
       imageFile: imageFile ?? this.imageFile,
       loading: loading ?? this.loading,
       message: message ?? this.message,
@@ -62,9 +65,9 @@ class AbsenPulangState {
   }
 }
 
-class AbsenPulangNotifier extends Notifier<AbsenPulangState> {
+class AbsenMasukNotifier extends Notifier<AbsenMasukState> {
   @override
-  AbsenPulangState build() => const AbsenPulangState();
+  AbsenMasukState build() => const AbsenMasukState();
 
   void setImage(File? f) => state = state.copyWith(imageFile: f);
   void setLoading(bool v) => state = state.copyWith(loading: v);
@@ -76,51 +79,80 @@ class AbsenPulangNotifier extends Notifier<AbsenPulangState> {
   void setFaceMessage(String? m) => state = state.copyWith(faceMessage: m);
   void setAvatarUrl(String? u) => state = state.copyWith(avatarUrl: u);
 
-  /// Reset transient AbsenPulang state (used when leaving the page)
-  void clear() => state = const AbsenPulangState();
+  /// Reset transient AbsenMasuk state (used when leaving the page)
+  void clear() => state = const AbsenMasukState();
 }
 
-final absenPulangProvider =
-    NotifierProvider<AbsenPulangNotifier, AbsenPulangState>(
-      () => AbsenPulangNotifier(),
+final absenMasukProvider =
+    NotifierProvider<AbsenMasukNotifier, AbsenMasukState>(
+      () => AbsenMasukNotifier(),
     );
 
-class AbsenPulangPage extends ConsumerStatefulWidget {
+class AbsenMasukBkoPage extends ConsumerStatefulWidget {
   final Map<String, dynamic>? data;
-  const AbsenPulangPage({super.key, this.data});
+  const AbsenMasukBkoPage({super.key, this.data});
 
   @override
-  ConsumerState<AbsenPulangPage> createState() => _AbsenPulangPageState();
+  ConsumerState<AbsenMasukBkoPage> createState() => _AbsenMasukBkoPageState();
 }
 
-class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
-  Future<void> _initCamera() async {}
+class _AbsenMasukBkoPageState extends ConsumerState<AbsenMasukBkoPage> {
+  // Transient UI state is managed by absenMasukProvider
 
   @override
   void dispose() {
-    // Ensure any shared scan transient state is cleared when AbsenPulangPage is disposed
+    // ref.read(scanMasukProvider.notifier).clear();
     try {
-      ref.read(scanPulangProvider.notifier).clear();
+      ref.read(scanMasukProvider.notifier).clear();
     } catch (_) {}
+
+    // Clear AbsenMasuk page transient state (image, messages, etc.)
+    try {
+      ref.read(absenMasukProvider.notifier).clear();
+    } catch (e) {
+      log('Error clearing absenMasukProvider state in _goToDashboard: $e');
+    }
+
+    // Stop scanning and clear transient scan state when disposing the page
+    // try {
+    //   ref.read(scanMasukProvider.notifier).setIsScanning(false);
+    // } catch (_) {}
+    // try {
+    //   ref.read(scanMasukProvider.notifier).setLastCode(null);
+    //   ref.read(scanMasukProvider.notifier).setQrValidationResult(null);
+    //   ref.read(scanMasukProvider.notifier).setValidationError(null);
+    //   ref.read(scanMasukProvider.notifier).setIsValidating(false);
+    //   ref.read(scanMasukProvider.notifier).setNavigated(false);
+    //   ref.read(scanMasukProvider.notifier).setQrLocation(null);
+    //   ref.read(scanMasukProvider.notifier).setDistanceMeters(null);
+    // } catch (e) {
+    //   log('Error clearing scanMasukProvider state in dispose: $e');
+    // }
     super.dispose();
   }
 
   void _goToDashboard() {
-    log('AbsenPulangPage: _goToDashboard dipanggil');
-    // Clear any scan transient state when leaving AbsenPulang so scanner doesn't keep stale data when user returns.
+    log('AbsenMasukBkoPage: _goToDashboard dipanggil');
+    // Clear scanMasuk transient state before leaving so QR data doesn't persist
     try {
-      ref.read(scanPulangProvider.notifier).clear();
-    } catch (_) {}
-    // Clear AbsenPulang page transient state (image, messages, etc.)
+      ref.read(scanMasukProvider.notifier).clear();
+    } catch (e) {
+      log('Error clearing scanMasukProvider state in _goToDashboard: $e');
+    }
+
+    // Clear AbsenMasuk page transient state (image, messages, etc.)
     try {
-      ref.read(absenPulangProvider.notifier).clear();
-    } catch (_) {}
-    log('AbsenPulangPage: navigating to Dashboard (root)');
+      ref.read(absenMasukProvider.notifier).clear();
+    } catch (e) {
+      log('Error clearing absenMasukProvider state in _goToDashboard: $e');
+    }
+
+    log('AbsenMasukBkoPage: navigating to Dashboard (root)');
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const DashboardPage()),
       (route) => false,
     );
-    log('AbsenPulangPage: navigation to Dashboard requested');
+    log('AbsenMasukBkoPage: navigation to Dashboard requested');
   }
 
   @override
@@ -129,9 +161,10 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _getLocationAndAddress();
       await _loadAvatarUrl();
-      await _initCamera();
     });
   }
+
+  // _initCamera removed
 
   Future<void> _loadAvatarUrl() async {
     final prefs = await SharedPreferences.getInstance();
@@ -141,7 +174,7 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
         final user = User.fromJson(json.decode(userJson));
         if (user.avatar.isNotEmpty) {
           ref
-              .read(absenPulangProvider.notifier)
+              .read(absenMasukProvider.notifier)
               .setAvatarUrl(
                 'https://panelcobra.cbsguard.co.id/assets/img/avatar/${user.avatar}',
               );
@@ -158,9 +191,9 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
       preferredCameraDevice: CameraDevice.front,
     );
     if (picked != null) {
-      ref.read(absenPulangProvider.notifier).setImage(File(picked.path));
-      ref.read(absenPulangProvider.notifier).setFacePercent(null);
-      ref.read(absenPulangProvider.notifier).setFaceMessage('');
+      ref.read(absenMasukProvider.notifier).setImage(File(picked.path));
+      ref.read(absenMasukProvider.notifier).setFacePercent(null);
+      ref.read(absenMasukProvider.notifier).setFaceMessage('');
       await _uploadFace(File(picked.path));
     }
   }
@@ -193,14 +226,14 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
         user = User.fromJson(json.decode(userJson));
       } catch (e) {
         ref
-            .read(absenPulangProvider.notifier)
+            .read(absenMasukProvider.notifier)
             .setFaceMessage("Data user tidak valid");
         return;
       }
     }
     if (user == null) {
       ref
-          .read(absenPulangProvider.notifier)
+          .read(absenMasukProvider.notifier)
           .setFaceMessage("Token autentikasi tidak tersedia");
       return;
     }
@@ -208,26 +241,24 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
       imageFile: compressedFile,
       user: user,
     );
-    ref.read(absenPulangProvider.notifier).setFacePercent(result?.percent);
-    ref
-        .read(absenPulangProvider.notifier)
-        .setFaceMessage(result?.message ?? '');
+    ref.read(absenMasukProvider.notifier).setFacePercent(result?.percent);
+    ref.read(absenMasukProvider.notifier).setFaceMessage(result?.message ?? '');
   }
 
   Future<void> _getLocationAndAddress() async {
     final pos = await LocationService.getLocation(context: context);
     if (!mounted) return;
-    ref.read(absenPulangProvider.notifier).setCurrentPosition(pos);
+    ref.read(absenMasukProvider.notifier).setCurrentPosition(pos);
     if (pos != null) {
       final addr = await LocationService.resolveAddress(pos);
       if (!mounted) return;
-      ref.read(absenPulangProvider.notifier).setAddress(addr);
+      ref.read(absenMasukProvider.notifier).setAddress(addr);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(absenPulangProvider);
+    final state = ref.watch(absenMasukProvider);
     return PopScope(
       canPop: false, // Prevent automatic pop
       onPopInvokedWithResult: (bool didPop, Object? result) async {
@@ -242,7 +273,7 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Absen Pulang'),
+          title: const Text('Absen Masuk'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: _goToDashboard,
@@ -437,21 +468,17 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
                                 state.facePercent! < 65.0)
                           ? () {
                               ref
-                                  .read(absenPulangProvider.notifier)
+                                  .read(absenMasukProvider.notifier)
                                   .setImage(null);
                               ref
-                                  .read(absenPulangProvider.notifier)
+                                  .read(absenMasukProvider.notifier)
                                   .setFacePercent(null);
                               ref
-                                  .read(absenPulangProvider.notifier)
+                                  .read(absenMasukProvider.notifier)
                                   .setFaceMessage('');
                               ref
-                                  .read(absenPulangProvider.notifier)
+                                  .read(absenMasukProvider.notifier)
                                   .setMessage('');
-                              // Also clear shared scan state so scanner restarts clean
-                              try {
-                                ref.read(scanPulangProvider.notifier).clear();
-                              } catch (_) {}
                             }
                           : null,
                       child:
@@ -471,9 +498,9 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
   }
 
   Future<void> _submit() async {
-    log('AbsenMasukPage: _submit dipanggil');
-    final notifier = ref.read(absenPulangProvider.notifier);
-    final state = ref.read(absenPulangProvider);
+    log('AbsenMasukBkoPage: _submit dipanggil');
+    final notifier = ref.read(absenMasukProvider.notifier);
+    final state = ref.read(absenMasukProvider);
 
     if (state.imageFile == null) {
       notifier.setMessage("Foto wajib diisi");
@@ -525,22 +552,11 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
       return;
     }
 
-    String? idAbsen =
-        widget.data?['id_absen']?.toString() ??
-        widget.data?['idAbsen']?.toString();
-    if (idAbsen == null || idAbsen.isEmpty) {
-      idAbsen = prefs.getString('id_absen');
-    }
-
-    log('[AbsenPulang] idAbsen: $idAbsen');
-
-    final result = await AbsenKeluarService.sendAbsen(
+    final result = await AbsenMasukBkoService.sendAbsen(
       user: user,
       position: state.currentPosition,
       imageFile: compressedFile ?? state.imageFile!,
-      cekModeData: widget.data,
-      harimasuk: widget.data?['harimasuk']?.toString(),
-      idAbsen: idAbsen,
+      cekModeData: null,
     );
 
     notifier.setLoading(false);

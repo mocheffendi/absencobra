@@ -4,8 +4,8 @@ import 'dart:developer';
 import 'package:cobra_apps/pages/absen_masuk_page.dart';
 import 'package:cobra_apps/pages/absen_pulang_page.dart';
 import 'package:cobra_apps/pages/create_avatar_page.dart';
-import 'package:cobra_apps/pages/scan_masuk_page.dart';
-import 'package:cobra_apps/pages/scan_pulang_page.dart';
+import 'package:cobra_apps/pages/scan_masuk_bko_page.dart';
+import 'package:cobra_apps/pages/scan_pulang_bko_page.dart';
 import 'package:cobra_apps/pages/dashboard_page.dart';
 import 'package:cobra_apps/utility/settings.dart';
 import 'package:flutter/material.dart';
@@ -17,14 +17,14 @@ import 'package:cobra_apps/providers/page_providers.dart';
 import '../providers/attendance_provider.dart';
 import '../models/user.dart';
 
-class AbsenPage extends ConsumerStatefulWidget {
-  const AbsenPage({super.key});
+class LemburPage extends ConsumerStatefulWidget {
+  const LemburPage({super.key});
 
   @override
-  ConsumerState<AbsenPage> createState() => _AbsenPageState();
+  ConsumerState<LemburPage> createState() => _LemburPageState();
 }
 
-class _AbsenPageState extends ConsumerState<AbsenPage> {
+class _LemburPageState extends ConsumerState<LemburPage> {
   @override
   void initState() {
     super.initState();
@@ -86,7 +86,9 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
                 log('has_absen_today: ${data['has_absen_today']}');
                 if (data['has_absen_today'] == true) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Hari ini sudah absen')),
+                    const SnackBar(
+                      content: Text('Hari ini sudah absen lembur'),
+                    ),
                   );
                   Future.delayed(const Duration(milliseconds: 800), () {
                     if (!mounted) return;
@@ -112,7 +114,7 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ScanMasukPage(data: data),
+                        builder: (_) => ScanMasukBkoPage(data: data),
                       ),
                     );
                   }
@@ -128,7 +130,7 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ScanPulangPage(data: data),
+                        builder: (_) => ScanPulangBkoPage(data: data),
                       ),
                     );
                   }
@@ -143,9 +145,23 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
             });
           } else {
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(data['message'] ?? 'No active absen')),
-            );
+            // If server reports already absen today, show message and navigate back
+            if (data['has_absen_today'] == true) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Hari ini sudah absen lembur')),
+              );
+              Future.delayed(const Duration(milliseconds: 800), () {
+                if (!mounted) return;
+                Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const DashboardPage()),
+                  (route) => false,
+                );
+              });
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(data['message'] ?? 'No active absen')),
+              );
+            }
           }
         }
         // log kept after handling
@@ -179,7 +195,7 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
       final idpegawai = user.id_pegawai.toString();
       log('Using idpegawai=$idpegawai for cek_mod_absen');
       final url = Uri.parse(
-        '$kBaseUrl/api/cek_mod_absen.php?idpegawai=$idpegawai',
+        '$kBaseUrl/api/cek_mod_absen_bko.php?idpegawai=$idpegawai',
       );
       final r = await http.get(url);
       if (r.statusCode != 200) return null;
@@ -251,6 +267,22 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
     }
 
     final status = data['status'] == true;
+
+    // if server indicates user already absen today, show and return to dashboard
+    if (data['has_absen_today'] == true) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Hari ini sudah absen')));
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (!mounted) return;
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const DashboardPage()),
+          (route) => false,
+        );
+      });
+      return;
+    }
 
     if (!status) {
       if (!mounted) return;
