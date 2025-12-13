@@ -1,3 +1,4 @@
+import 'package:cobra_apps/pages/patroli_page.dart';
 import 'package:cobra_apps/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,6 +50,7 @@ class MyApp extends ConsumerWidget {
         '/login': (context) => const LoginPage(),
         '/absen': (context) => const AbsenPage(),
         '/patrol': (context) => const PatrolPage(),
+        '/patroli': (context) => const PatroliPage(),
         '/dashboard': (context) => const DashboardPage(),
         '/kinerja': (context) => const KinerjaPage(),
         '/account_setting': (context) => const AccountSettingPage(),
