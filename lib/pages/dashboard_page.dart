@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 // import 'package:cobra_apps/pages/shared_prefs_page.dart'; // unused
+import 'package:cobra_apps/pages/cuti_page.dart';
 import 'package:cobra_apps/pages/patroli_page.dart';
+import 'package:cobra_apps/pages/shared_prefs_page.dart';
 import 'package:cobra_apps/providers/lembur_provider.dart';
 import 'package:cobra_apps/widgets/dashboard_table_lembur.dart';
 import 'package:flutter/material.dart';
@@ -10,18 +12,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:cobra_apps/pages/patrol_page.dart';
 import 'package:cobra_apps/pages/account_setting_page.dart';
-import 'package:cobra_apps/pages/patrol_image_preview_page.dart';
+// import 'package:cobra_apps/pages/patrol_image_preview_page.dart';
 import 'package:cobra_apps/pages/slip_gaji_page.dart';
 import 'package:cobra_apps/pages/lembur_page.dart';
 
 import 'package:cobra_apps/utility/getinitials.dart';
-import 'package:cobra_apps/utility/settings.dart';
-import 'package:cobra_apps/utility/formatters.dart';
+// import 'package:cobra_apps/utility/settings.dart';
+// import 'package:cobra_apps/utility/formatters.dart';
 
 import 'package:cobra_apps/widgets/absen_card.dart';
 import 'package:cobra_apps/widgets/dashboard_menu.dart';
 import 'package:cobra_apps/widgets/dashboard_table.dart';
 import 'package:cobra_apps/widgets/frosted_icon_button.dart';
+import 'package:cobra_apps/widgets/dashboard_table_patrol.dart';
 
 import 'package:cobra_apps/models/user.dart';
 import 'package:cobra_apps/providers/user_provider.dart';
@@ -111,9 +114,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final user = ref.watch(userProvider);
     final avatarPath = user?.avatar ?? '';
     final patrolState = ref.watch(patrolProvider);
-    final patrolList = patrolState.patrolList;
-    final isLoadingPatrol = patrolState.isLoading;
-    final patrolError = patrolState.error;
+    // final patrolList = patrolState.patrolList;
+    // final isLoadingPatrol = patrolState.isLoading;
+    // final patrolError = patrolState.error;
     final absenData = ref.watch(absenProvider);
     final lemburData = ref.watch(lemburProvider);
 
@@ -243,68 +246,108 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        child: Column(
                           children: [
-                            DashboardMenu(
-                              icon: Icons.fingerprint,
-                              label: "Absen",
-                              onTap: () =>
-                                  Navigator.pushNamed(context, "/absen"),
-                            ),
-                            DashboardMenu(
-                              icon: Icons.bar_chart,
-                              label: "Kinerja",
-                              onTap: () =>
-                                  Navigator.pushNamed(context, "/kinerja"),
-                            ),
-                            DashboardMenu(
-                              icon: Icons.shield,
-                              label: "Patrol",
-                              onTap: () async {
-                                final result = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const PatrolPage(),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                DashboardMenu(
+                                  icon: Icons.fingerprint,
+                                  label: "Absen",
+                                  onTap: () =>
+                                      Navigator.pushNamed(context, "/absen"),
+                                ),
+                                DashboardMenu(
+                                  icon: Icons.bar_chart,
+                                  label: "Kinerja",
+                                  onTap: () =>
+                                      Navigator.pushNamed(context, "/kinerja"),
+                                ),
+                                DashboardMenu(
+                                  icon: Icons.shield,
+                                  label: "Patrol",
+                                  onTap: () async {
+                                    final result = await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const PatroliPage(),
+                                      ),
+                                    );
+                                    if (result == true) {
+                                      // refresh patrol history via provider
+                                      ref
+                                          .read(patrolProvider.notifier)
+                                          .fetchPatrolHistory();
+                                    }
+                                  },
+                                ),
+                                DashboardMenu(
+                                  icon: Icons.receipt_long,
+                                  label: "Slip",
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const SlipGajiPage(),
+                                    ),
                                   ),
-                                );
-                                if (result == true) {
-                                  // refresh patrol history via provider
-                                  ref
-                                      .read(patrolProvider.notifier)
-                                      .fetchPatrolHistory();
-                                }
-                              },
-                            ),
-                            DashboardMenu(
-                              icon: Icons.receipt_long,
-                              label: "Slip",
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const SlipGajiPage(),
                                 ),
-                              ),
+                              ],
                             ),
-                            DashboardMenu(
-                              icon: Icons.access_time,
-                              label: "Lembur",
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const LemburPage(),
+                            SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                DashboardMenu(
+                                  icon: Icons.access_time,
+                                  label: "Lembur",
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const LemburPage(),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            DashboardMenu(
-                              icon: Icons.access_time,
-                              label: "Patroli",
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const PatroliPage(),
+                                // DashboardMenu(
+                                //   icon: Icons.access_time,
+                                //   label: "Patroli",
+                                //   onTap: () => Navigator.push(
+                                //     context,
+                                //     MaterialPageRoute(
+                                //       builder: (_) => const PatroliPage(),
+                                //     ),
+                                //   ),
+                                // ),
+                                DashboardMenu(
+                                  icon: Icons.calendar_today,
+                                  label: "Izin",
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const CutiPage(),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                // DashboardMenu(
+                                //   icon: Icons.calendar_today,
+                                //   label: "Pegawai",
+                                //   onTap: () => Navigator.push(
+                                //     context,
+                                //     MaterialPageRoute(
+                                //       builder: (_) => const CreatePegawaiPage(),
+                                //     ),
+                                //   ),
+                                // ),
+                                // DashboardMenu(
+                                //   icon: Icons.document_scanner,
+                                //   label: "SharePref",
+                                //   onTap: () => Navigator.push(
+                                //     context,
+                                //     MaterialPageRoute(
+                                //       builder: (_) => const SharedPrefsPage(),
+                                //     ),
+                                //   ),
+                                // ),
+                              ],
                             ),
                           ],
                         ),
@@ -375,237 +418,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         lemburData: lemburData,
                       ),
 
-                      // Data Patroli Anggota - frosted to match app style
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(12.0),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.06),
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              // translucent frosted header instead of solid blue
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(12.0),
-                                  ),
-                                ),
-                                child: const Text(
-                                  "Data Patroli Anggota",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              Table(
-                                border: TableBorder.symmetric(
-                                  inside: BorderSide(
-                                    color: Colors.white.withValues(alpha: 0.06),
-                                  ),
-                                  outside: BorderSide(
-                                    color: Colors.white.withValues(alpha: 0.04),
-                                  ),
-                                ),
-                                children: [
-                                  TableRow(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.04,
-                                      ),
-                                    ),
-                                    children: const [
-                                      Padding(
-                                        padding: EdgeInsets.all(8.0),
-                                        child: Text(
-                                          "Tanggal & Jam",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: EdgeInsets.all(8.0),
-                                        child: Text(
-                                          "Foto Lokasi",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (isLoadingPatrol)
-                                    TableRow(
-                                      children: [
-                                        Padding(
-                                          padding: EdgeInsets.all(8.0),
-                                          child: Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                        ),
-                                        SizedBox(),
-                                      ],
-                                    )
-                                  else if (patrolError != null)
-                                    TableRow(
-                                      children: [
-                                        Padding(
-                                          padding: EdgeInsets.all(8.0),
-                                          child: Text(
-                                            "Error: $patrolError",
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                        SizedBox(),
-                                      ],
-                                    )
-                                  else if (patrolList.isEmpty)
-                                    TableRow(
-                                      children: [
-                                        Padding(
-                                          padding: EdgeInsets.all(8.0),
-                                          child: Text(
-                                            "Tidak ada data",
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                        SizedBox(),
-                                      ],
-                                    )
-                                  else
-                                    ...patrolList.map<TableRow>((row) {
-                                      // PatrolData model used in patrol_provider
-                                      return TableRow(
-                                        children: [
-                                          Padding(
-                                            padding: EdgeInsets.all(8.0),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  formatPatrolDateTime(
-                                                    row.timestamp,
-                                                  ),
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                                if (row.status.isNotEmpty)
-                                                  Text(
-                                                    row.status,
-                                                    style: TextStyle(
-                                                      color: Colors.white70,
-                                                      fontSize: 11,
-                                                    ),
-                                                    maxLines: 2,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                if (row.address.isNotEmpty)
-                                                  Text(
-                                                    row.address,
-                                                    style: TextStyle(
-                                                      color: Colors.white60,
-                                                      fontSize: 10,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: EdgeInsets.all(8.0),
-                                            child: row.fotoUrl.isNotEmpty
-                                                ? GestureDetector(
-                                                    onTap: () {
-                                                      final imageUrl =
-                                                          '$kBaseUrl$kPatrolUrl${row.fotoUrl}';
-                                                      Navigator.push(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                          builder: (_) =>
-                                                              PatrolImagePreviewPage(
-                                                                imageUrl:
-                                                                    imageUrl,
-                                                                heroTag:
-                                                                    'patrol-${row.id}',
-                                                              ),
-                                                        ),
-                                                      );
-                                                    },
-                                                    child: Hero(
-                                                      tag: 'patrol-${row.id}',
-                                                      child: Container(
-                                                        width: 40,
-                                                        height: 40,
-                                                        decoration: BoxDecoration(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                          border: Border.all(
-                                                            color: Colors.white
-                                                                .withValues(
-                                                                  alpha: 0.3,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                        child: ClipRRect(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                6,
-                                                              ),
-                                                          child: Image.network(
-                                                            '$kBaseUrl$kPatrolUrl${row.fotoUrl}',
-                                                            fit: BoxFit.cover,
-                                                            errorBuilder:
-                                                                (
-                                                                  context,
-                                                                  error,
-                                                                  stackTrace,
-                                                                ) => Icon(
-                                                                  Icons
-                                                                      .image_not_supported,
-                                                                  color: Colors
-                                                                      .grey,
-                                                                  size: 20,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  )
-                                                : Icon(
-                                                    Icons.location_on,
-                                                    color: Colors.green,
-                                                    size: 20,
-                                                  ),
-                                          ),
-                                        ],
-                                      );
-                                    }),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
+                      DashboardTablePatrol(
+                        title: "Data Patroli Anggota",
+                        headers: ["Tanggal & Jam", "Foto Lokasi"],
+                        patrolState: patrolState,
                       ),
                     ]),
                   ),

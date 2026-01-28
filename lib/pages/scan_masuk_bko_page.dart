@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cobra_apps/models/user.dart';
 import 'package:cobra_apps/utility/settings.dart';
 import 'package:cobra_apps/widgets/scanner_overlay2.dart';
 import 'package:flutter/material.dart';
@@ -247,7 +248,20 @@ class _ScanMasukBkoPageState extends ConsumerState<ScanMasukBkoPage> {
   Future<void> _validateQRCode(String code) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final idPegawai = prefs.getString('idpegawai') ?? '1';
+      // final idPegawai = prefs.getString('idpegawai') ?? '1';
+      String idPegawai = '1';
+      final userJson = prefs.getString('user');
+      if (userJson != null && userJson.isNotEmpty) {
+        try {
+          final user = User.fromJson(json.decode(userJson));
+          idPegawai = user.id_pegawai.toString();
+        } catch (e) {
+          idPegawai = prefs.getString('id_pegawai') ?? '1';
+        }
+      } else {
+        idPegawai = prefs.getString('id_pegawai') ?? '1';
+      }
+
       final jenis = 'masuk'; // or 'pulang' for absen pulang
       final url = Uri.parse('$kBaseUrl/include/validasi_qr.php');
       final resp = await http.post(

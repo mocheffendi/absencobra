@@ -1,8 +1,9 @@
 // ignore_for_file: non_constant_identifier_names
 
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utility/shared_prefs_util.dart';
 
 class ProfileResponse {
@@ -103,9 +104,16 @@ class ProfileService {
         return ProfileResponse(status: 'error', error: 'Token tidak ditemukan');
       }
 
-      final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/api/profile.php',
-      );
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUrl = prefs.getString('primary_url');
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'https://absencobra.cbsguard.co.id';
+      }
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
+      final uri = Uri.parse('$baseUrl/api/profile.php');
 
       final response = await http.get(
         uri,
@@ -117,15 +125,20 @@ class ProfileService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        log(
-          'Profile API response: ${response.body}',
-          name: 'ProfileService.getProfile',
+        LogService.log(
+          level: 'INFO',
+          source: 'ProfileService',
+          action: 'getProfile',
+          message: 'Profile API response: ${response.body}',
         );
         return ProfileResponse.fromJson(data);
       } else {
-        log(
-          'Profile API failed with status: ${response.statusCode}, body: ${response.body}',
-          name: 'ProfileService.getProfile',
+        LogService.log(
+          level: 'ERROR',
+          source: 'ProfileService',
+          action: 'getProfile_failed',
+          message:
+              'Profile API failed with status: ${response.statusCode}, body: ${response.body}',
         );
         return ProfileResponse(
           status: 'error',
@@ -133,7 +146,12 @@ class ProfileService {
         );
       }
     } catch (e) {
-      log('ProfileService.getProfile error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'ProfileService',
+        action: 'getProfile_exception',
+        message: 'ProfileService.getProfile error: $e',
+      );
       return ProfileResponse(status: 'error', error: 'Error: $e');
     }
   }

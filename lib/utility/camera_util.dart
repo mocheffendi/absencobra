@@ -1,4 +1,4 @@
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
@@ -45,7 +45,12 @@ class CameraUtil {
       }
       return controller;
     } on CameraException catch (e) {
-      log('CameraException: ${e.code} ${e.description}');
+      LogService.log(
+        level: 'ERROR',
+        source: 'camera_util',
+        action: 'camera_exception',
+        message: 'CameraException: ${e.code} ${e.description}',
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal akses kamera: ${e.code}')),
@@ -53,7 +58,12 @@ class CameraUtil {
       }
       return null;
     } catch (e) {
-      log('camera init error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'camera_util',
+        action: 'init_error',
+        message: 'camera init error: $e',
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gagal inisialisasi kamera')),

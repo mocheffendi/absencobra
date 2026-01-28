@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:cobra_apps/pages/dashboard_page.dart';
@@ -106,7 +106,12 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
   }
 
   void _goToDashboard() {
-    log('AbsenPulangPage: _goToDashboard dipanggil');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_page',
+      action: 'goToDashboard_called',
+      message: 'AbsenPulangPage: _goToDashboard dipanggil',
+    );
     // Clear any scan transient state when leaving AbsenPulang so scanner doesn't keep stale data when user returns.
     try {
       ref.read(scanPulangProvider.notifier).clear();
@@ -115,12 +120,22 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
     try {
       ref.read(absenPulangProvider.notifier).clear();
     } catch (_) {}
-    log('AbsenPulangPage: navigating to Dashboard (root)');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_page',
+      action: 'navigating_to_dashboard',
+      message: 'AbsenPulangPage: navigating to Dashboard (root)',
+    );
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const DashboardPage()),
       (route) => false,
     );
-    log('AbsenPulangPage: navigation to Dashboard requested');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_page',
+      action: 'navigation_requested',
+      message: 'AbsenPulangPage: navigation to Dashboard requested',
+    );
   }
 
   @override
@@ -471,7 +486,12 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
   }
 
   Future<void> _submit() async {
-    log('AbsenMasukPage: _submit dipanggil');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_page',
+      action: 'submit_called',
+      message: 'AbsenMasukPage: _submit dipanggil',
+    );
     final notifier = ref.read(absenPulangProvider.notifier);
     final state = ref.read(absenPulangProvider);
 
@@ -532,7 +552,12 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
       idAbsen = prefs.getString('id_absen');
     }
 
-    log('[AbsenPulang] idAbsen: $idAbsen');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_page',
+      action: 'id_absen',
+      message: '[AbsenPulang] idAbsen: $idAbsen',
+    );
 
     final result = await AbsenKeluarService.sendAbsen(
       user: user,
@@ -543,11 +568,25 @@ class _AbsenPulangPageState extends ConsumerState<AbsenPulangPage> {
       idAbsen: idAbsen,
     );
 
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_page',
+      action: 'Hasil submit absen pulang',
+      message: 'Hasil submit absen pulang : $result',
+    );
+
     notifier.setLoading(false);
     if (result != null && result.error != null) {
       notifier.setMessage(result.error!);
       return;
     }
+
+    LogService.log(
+      level: 'INFO',
+      source: 'absen_pulang_page',
+      action: 'send absen sudah berhasil',
+      message: 'otomatis kembali ke Dashboard',
+    );
 
     _goToDashboard();
 

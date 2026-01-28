@@ -3,7 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
 import 'package:cobra_apps/utility/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -165,7 +165,12 @@ class PatrolNotifier extends Notifier<PatrolState> {
         error: null,
       );
     } catch (e) {
-      log('Location error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'patrol_provider',
+        action: 'get_current_location',
+        message: 'Location error: $e',
+      );
       state = state.copyWith(
         error: "Gagal mendapatkan lokasi: ${e.toString()}",
         currentAddress: "Gagal mendapatkan alamat",
@@ -191,34 +196,42 @@ class PatrolNotifier extends Notifier<PatrolState> {
 
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString('user');
-      User? user;
-      if (userJson != null) {
+      String? idPegawai;
+      if (userJson != null && userJson.isNotEmpty) {
         try {
-          user = User.fromJson(json.decode(userJson));
+          final u = User.fromJson(json.decode(userJson));
+          idPegawai = u.id_pegawai.toString();
         } catch (e) {
-          log('Error parsing user data in sendPatrolData: $e');
+          LogService.log(
+            level: 'WARNING',
+            source: 'patrol_provider',
+            action: 'parse_user_sendPatrolData',
+            message: 'Error parsing user data in sendPatrolData: $e',
+          );
         }
       }
 
-      if (user == null || user.token == null || user.token!.isEmpty) {
+      if (idPegawai == null || idPegawai.isEmpty) {
         state = state.copyWith(
           isLoading: false,
-          error: "Token autentikasi tidak tersedia",
+          error: "ID pegawai tidak tersedia",
         );
         return;
       }
 
-      final token = user.token!;
-
       final response = await http.post(
         Uri.parse("$kBaseApiUrl/patrol_api.php"),
-        headers: {"Authorization": "Bearer $token"},
-        body: {"qr_id": qrData},
+        body: {"qr_id": qrData, "id_pegawai": idPegawai},
       );
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
-        log("Patrol response: $result");
+        LogService.log(
+          level: 'INFO',
+          source: 'patrol_provider',
+          action: 'patrol_response',
+          message: "Patrol response: $result",
+        );
 
         // Add to patrol list
         final newPatrol = PatrolData(
@@ -243,21 +256,36 @@ class PatrolNotifier extends Notifier<PatrolState> {
         );
       }
     } on SocketException catch (e) {
-      log("Patrol network error: $e");
+      LogService.log(
+        level: 'ERROR',
+        source: 'patrol_provider',
+        action: 'patrol_network_error',
+        message: "Patrol network error: $e",
+      );
       state = state.copyWith(
         isLoading: false,
         error:
             'Internet is disconnected, please check your internet connection',
       );
     } on http.ClientException catch (e) {
-      log("Patrol client error: $e");
+      LogService.log(
+        level: 'ERROR',
+        source: 'patrol_provider',
+        action: 'patrol_client_error',
+        message: "Patrol client error: $e",
+      );
       state = state.copyWith(
         isLoading: false,
         error:
             'Internet is disconnected, please check your internet connection',
       );
     } catch (e) {
-      log("Patrol error: $e");
+      LogService.log(
+        level: 'ERROR',
+        source: 'patrol_provider',
+        action: 'patrol_error',
+        message: "Patrol error: $e",
+      );
       state = state.copyWith(
         isLoading: false,
         error: "Gagal kirim data: ${e.toString()}",
@@ -272,37 +300,61 @@ class PatrolNotifier extends Notifier<PatrolState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString('user');
-      User? user;
-      if (userJson != null) {
+      String? idPegawai;
+      if (userJson != null && userJson.isNotEmpty) {
         try {
-          user = User.fromJson(json.decode(userJson));
+          final u = User.fromJson(json.decode(userJson));
+          idPegawai = u.id_pegawai.toString();
         } catch (e) {
-          log('Error parsing user data in fetchPatrolHistory: $e');
+          LogService.log(
+            level: 'WARNING',
+            source: 'patrol_provider',
+            action: 'parse_user_fetchHistory',
+            message: 'Error parsing user data in fetchPatrolHistory: $e',
+          );
         }
       }
 
-      if (user == null || user.token == null || user.token!.isEmpty) {
+      if (idPegawai == null || idPegawai.isEmpty) {
         state = state.copyWith(
           isLoading: false,
-          error: "Token autentikasi tidak tersedia",
+          error: "ID pegawai tidak tersedia",
         );
         return;
       }
 
-      final token = user.token!;
-      log('Fetching patrol history with token: ${token.substring(0, 10)}...');
-
-      final response = await http.get(
-        Uri.parse("$kBaseApiUrl/get_patroli.php"),
-        headers: {"Authorization": "Bearer $token"},
+      LogService.log(
+        level: 'DEBUG',
+        source: 'patrol_provider',
+        action: 'fetch_history',
+        message: 'Fetching patrol history for id_pegawai: $idPegawai',
       );
 
-      log('Patrol history response status: ${response.statusCode}');
-      log('Patrol history response body: ${response.body}');
+      final response = await http.get(
+        Uri.parse("$kBaseApiUrl/get_patrol.php?id_pegawai=$idPegawai"),
+      );
+
+      LogService.log(
+        level: 'INFO',
+        source: 'patrol_provider',
+        action: 'history_status',
+        message: 'Patrol history response status: ${response.statusCode}',
+      );
+      LogService.log(
+        level: 'INFO',
+        source: 'patrol_provider',
+        action: 'history_body',
+        message: 'Patrol history response body: ${response.body}',
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        log("Fetch patrol data: $data");
+        LogService.log(
+          level: 'DEBUG',
+          source: 'patrol_provider',
+          action: 'fetch_data',
+          message: "Fetch patrol data: $data",
+        );
         if (data['success'] == true || data['success'] == 'true') {
           final List<PatrolData> patrolList = (data['data'] as List)
               .map((item) => PatrolData.fromJson(item))
@@ -312,7 +364,13 @@ class PatrolNotifier extends Notifier<PatrolState> {
           patrolList.sort((a, b) => b.timestamp.compareTo(a.timestamp));
           final limitedPatrolList = patrolList.take(7).toList();
 
-          log('Successfully loaded ${limitedPatrolList.length} patrol records (limited to 7)');
+          LogService.log(
+            level: 'INFO',
+            source: 'patrol_provider',
+            action: 'loaded_records',
+            message:
+                'Successfully loaded ${limitedPatrolList.length} patrol records (limited to 7)',
+          );
 
           state = state.copyWith(
             patrolList: limitedPatrolList,
@@ -320,35 +378,60 @@ class PatrolNotifier extends Notifier<PatrolState> {
             error: null,
           );
         } else {
-          log('API returned error: ${data['message']}');
+          LogService.log(
+            level: 'ERROR',
+            source: 'patrol_provider',
+            action: 'api_returned_error',
+            message: 'API returned error: ${data['message']}',
+          );
           state = state.copyWith(
             isLoading: false,
             error: data['message'] ?? 'Gagal mengambil data patrol',
           );
         }
       } else {
-        log('HTTP error: ${response.statusCode}');
+        LogService.log(
+          level: 'ERROR',
+          source: 'patrol_provider',
+          action: 'http_error',
+          message: 'HTTP error: ${response.statusCode}',
+        );
         state = state.copyWith(
           isLoading: false,
           error: "Server error: ${response.statusCode}",
         );
       }
     } on SocketException catch (e) {
-      log("Fetch patrol network error: $e");
+      LogService.log(
+        level: 'ERROR',
+        source: 'patrol_provider',
+        action: 'fetch_network_error',
+        message: "Fetch patrol network error: $e",
+      );
       state = state.copyWith(
         isLoading: false,
         error:
             'Internet is disconnected, please check your internet connection',
       );
     } on http.ClientException catch (e) {
-      log("Fetch patrol client error: $e");
+      LogService.log(
+        level: 'ERROR',
+        source: 'patrol_provider',
+        action: 'fetch_client_error',
+        message: "Fetch patrol client error: $e",
+      );
       state = state.copyWith(
         isLoading: false,
         error:
             'Internet is disconnected, please check your internet connection',
       );
     } catch (e) {
-      log("Fetch patrol error: $e");
+      LogService.log(
+        level: 'ERROR',
+        source: 'patrol_provider',
+        action: 'fetch_error',
+        message: "Fetch patrol error: $e",
+      );
       state = state.copyWith(
         isLoading: false,
         error: "Gagal mengambil data: ${e.toString()}",

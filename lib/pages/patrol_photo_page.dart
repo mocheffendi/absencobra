@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:io';
 // network and settings are handled by services
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,7 @@ import '../models/user.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cobra_apps/services/patrol_service.dart';
 import 'package:cobra_apps/providers/patrol_provider.dart';
+import 'package:cobra_apps/widgets/gradient_button.dart';
 
 class PatrolPhotoState {
   final File? imageFile;
@@ -97,7 +99,7 @@ class _PatrolPhotoPageState extends ConsumerState<PatrolPhotoPage> {
       ref.read(patrolPhotoProvider.notifier).setNamaTmpt(null);
       ref.read(patrolPhotoProvider.notifier).setMessage('');
 
-      log('About to enter network try block');
+      log('About to check fetchNamaTmptService for qrId: ${widget.qrId}');
       // Use the centralized service for network logic.
       final result = await fetchNamaTmptService(widget.qrId);
       log('fetchNamaTmpt service result: $result');
@@ -156,20 +158,47 @@ class _PatrolPhotoPageState extends ConsumerState<PatrolPhotoPage> {
       }
     }
 
-    if (user == null || user.token == null || user.token!.isEmpty) {
+    if (user == null) {
       ref
           .read(patrolPhotoProvider.notifier)
-          .setMessage("Token autentikasi tidak tersedia");
+          .setMessage("Data user tidak tersedia");
       ref.read(patrolPhotoProvider.notifier).setLoading(false);
       return;
     }
 
-    final token = user.token!;
+    final token = user.token ?? '';
+
+    // Try to compress the image before upload to reduce payload size.
+    File? compressedFile;
+    try {
+      final originalPath = state.imageFile!.path;
+      final dot = originalPath.lastIndexOf('.');
+      final targetPath = dot != -1
+          ? '${originalPath.substring(0, dot)}_compressed${originalPath.substring(dot)}'
+          : '${originalPath}_compressed.jpg';
+      final xfile = await FlutterImageCompress.compressAndGetFile(
+        originalPath,
+        targetPath,
+        quality: 70,
+        minWidth: 300,
+        minHeight: 300,
+      );
+      if (xfile != null) {
+        compressedFile = File(xfile.path);
+        log('PatrolPhotoPage: compressed image saved to ${xfile.path}');
+      } else {
+        compressedFile = File(state.imageFile!.path);
+        log('PatrolPhotoPage: compression returned null, using original file');
+      }
+    } catch (e) {
+      log('PatrolPhotoPage: image compression failed: $e');
+      compressedFile = File(state.imageFile!.path);
+    }
 
     final result = await uploadPatrolPhotoService(
       qrId: widget.qrId,
       keterangan: _keteranganController.text,
-      filePath: state.imageFile!.path,
+      filePath: compressedFile.path,
       token: token,
     );
 
@@ -178,6 +207,7 @@ class _PatrolPhotoPageState extends ConsumerState<PatrolPhotoPage> {
         .read(patrolPhotoProvider.notifier)
         .setMessage(result['message'] ?? 'Terjadi kesalahan');
 
+    log('Patrol photo upload result: $result');
     if (result['success'] == true) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -197,6 +227,73 @@ class _PatrolPhotoPageState extends ConsumerState<PatrolPhotoPage> {
     }
   }
 
+  Future<void> _submitWithoutPhoto() async {
+    final state = ref.read(patrolPhotoProvider);
+    if (_keteranganController.text.isEmpty) {
+      ref
+          .read(patrolPhotoProvider.notifier)
+          .setMessage("Keterangan wajib diisi");
+      return;
+    }
+
+    ref.read(patrolPhotoProvider.notifier).setLoading(true);
+    ref.read(patrolPhotoProvider.notifier).setMessage('');
+
+    final prefs = await SharedPreferences.getInstance();
+    final userJson = prefs.getString('user');
+    User? user;
+    if (userJson != null) {
+      try {
+        user = User.fromJson(json.decode(userJson));
+      } catch (e) {
+        ref
+            .read(patrolPhotoProvider.notifier)
+            .setMessage("Data user tidak valid");
+        ref.read(patrolPhotoProvider.notifier).setLoading(false);
+        return;
+      }
+    }
+
+    if (user == null) {
+      ref
+          .read(patrolPhotoProvider.notifier)
+          .setMessage("Data user tidak tersedia");
+      ref.read(patrolPhotoProvider.notifier).setLoading(false);
+      return;
+    }
+
+    final token = user.token ?? '';
+
+    final result = await uploadPatrolPhotoService(
+      qrId: widget.qrId,
+      keterangan: _keteranganController.text,
+      filePath: '',
+      token: token,
+      attachFile: false,
+    );
+
+    ref.read(patrolPhotoProvider.notifier).setLoading(false);
+    ref
+        .read(patrolPhotoProvider.notifier)
+        .setMessage(result['message'] ?? 'Terjadi kesalahan');
+
+    log('Patrol photo upload (no file) result: $result');
+    if (result['success'] == true) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: const Text("Patroli berhasil!")));
+      try {
+        ref.read(patrolPhotoProvider.notifier).clear();
+        try {
+          ref.read(patrolProvider.notifier).setProcessingScan(false);
+          ref.read(patrolProvider.notifier).setScanning(false);
+        } catch (_) {}
+      } catch (_) {}
+      Navigator.pop(context, true);
+    }
+  }
+
   @override
   void dispose() {
     _keteranganController.dispose();
@@ -211,62 +308,91 @@ class _PatrolPhotoPageState extends ConsumerState<PatrolPhotoPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(patrolPhotoProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Foto & Submit Patroli')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView(
-          children: [
-            state.loadingNama
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Row(
-                      children: const [
-                        SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+      extendBodyBehindAppBar: true,
+      resizeToAvoidBottomInset: false,
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        title: const Text('Foto & Submit Patroli'),
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
+          ),
+          // reduced overlay so background remains visible through frosted elements
+          Positioned.fill(
+            child: Container(
+              // subtle dark tint so content remains readable
+              color: Colors.black.withValues(alpha: 0.15),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: ListView(
+              children: [
+                state.loadingNama
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Row(
+                          children: const [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 8),
+                            Text('Cek lokasi...'),
+                          ],
                         ),
-                        SizedBox(width: 8),
-                        Text('Cek lokasi...'),
-                      ],
-                    ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      state.namaTmpt != null
-                          ? 'Lokasi: ${state.namaTmpt}'
-                          : 'Lokasi tidak ditemukan',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: state.namaValid ? Colors.green : Colors.red,
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          state.namaTmpt != null
+                              ? 'Lokasi: ${state.namaTmpt}'
+                              : 'Lokasi tidak ditemukan',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: state.namaValid ? Colors.green : Colors.red,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-            TextField(
-              controller: _keteranganController,
-              decoration: const InputDecoration(labelText: 'Keterangan'),
+                TextField(
+                  controller: _keteranganController,
+                  decoration: const InputDecoration(labelText: 'Keterangan'),
+                ),
+                const SizedBox(height: 16),
+                state.imageFile == null
+                    ? const Text('Belum ada foto')
+                    : Image.file(state.imageFile!, height: 200),
+                const SizedBox(height: 16),
+                gradientPillButton(
+                  label: 'Ambil Foto',
+                  onTap: _pickImage,
+                  icon: Icons.camera_alt,
+                ),
+                const SizedBox(height: 16),
+                state.loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : gradientPillButton(
+                        label: 'Kirim Patroli',
+                        onTap: state.namaValid ? _submit : null,
+                        icon: Icons.send,
+                      ),
+                const SizedBox(height: 8),
+                // Button to test server endpoint without sending foto1
+                gradientPillButton(
+                  label: 'Kirim tanpa foto',
+                  onTap: state.loading ? null : _submitWithoutPhoto,
+                  icon: Icons.upload_file,
+                ),
+                const SizedBox(height: 16),
+                Text(state.message, style: const TextStyle(color: Colors.red)),
+              ],
             ),
-            const SizedBox(height: 16),
-            state.imageFile == null
-                ? const Text('Belum ada foto')
-                : Image.file(state.imageFile!, height: 200),
-            ElevatedButton.icon(
-              onPressed: _pickImage,
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Ambil Foto'),
-            ),
-            const SizedBox(height: 16),
-            state.loading
-                ? const Center(child: CircularProgressIndicator())
-                : ElevatedButton(
-                    onPressed: state.namaValid ? _submit : null,
-                    child: const Text('Kirim Patroli'),
-                  ),
-            const SizedBox(height: 16),
-            Text(state.message, style: const TextStyle(color: Colors.red)),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

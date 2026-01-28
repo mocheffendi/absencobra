@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 
 import 'package:cobra_apps/pages/absen_masuk_page.dart';
 import 'package:cobra_apps/pages/absen_pulang_page.dart';
@@ -13,6 +13,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cobra_apps/widgets/gradient_button.dart';
 import 'package:cobra_apps/providers/page_providers.dart';
 import '../providers/attendance_provider.dart';
 import '../models/user.dart';
@@ -44,14 +45,23 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
       try {
         user = User.fromJson(json.decode(userJson));
       } catch (e) {
-        log('Error parsing user data: $e');
+        LogService.log(
+          level: 'ERROR',
+          source: 'absen_page',
+          action: 'parse_user_error',
+          message: 'Error parsing user data: $e',
+        );
       }
     }
 
     final avatar = user?.avatar;
     if (user == null || avatar == null || avatar.isEmpty) {
-      log(
-        'User data belum lengkap atau avatar kosong. User: $user, Avatar: $avatar',
+      LogService.log(
+        level: 'WARNING',
+        source: 'absen_page',
+        action: 'incomplete_user_data',
+        message:
+            'User data belum lengkap atau avatar kosong. User: $user, Avatar: $avatar',
       );
       if (!mounted) return;
       Navigator.push(
@@ -60,7 +70,12 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
       );
     } else {
       // User data lengkap dan avatar valid, lanjutkan dengan logika lainnya
-      log('User data lengkap dengan avatar: $avatar');
+      LogService.log(
+        level: 'INFO',
+        source: 'absen_page',
+        action: 'complete_user_data',
+        message: 'User data lengkap dengan avatar: $avatar',
+      );
 
       try {
         final data = await _cekModAbsen();
@@ -68,7 +83,12 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
           if (!mounted) return;
           // store cek mode data in Riverpod provider instead of local setState
           ref.read(absenPageProvider.notifier).setCekModeData(data);
-          log('Cek mode data: $data');
+          LogService.log(
+            level: 'INFO',
+            source: 'absen_page',
+            action: 'cek_mode_data',
+            message: 'Cek mode data: $data',
+          );
           // route according to rules:
           // if status true & next_mod=scan_masuk & jenis_aturan='1' -> AbsenMasukPage
           // if status true & next_mod=scan_masuk & jenis_aturan!='1' -> ScanMasukPage
@@ -83,7 +103,12 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
               if (!mounted) return;
               try {
                 // if server says user already absen today, show message and go back to dashboard
-                log('has_absen_today: ${data['has_absen_today']}');
+                LogService.log(
+                  level: 'DEBUG',
+                  source: 'absen_page',
+                  action: 'has_absen_today',
+                  message: 'has_absen_today: ${data['has_absen_today']}',
+                );
                 if (data['has_absen_today'] == true) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Hari ini sudah absen')),
@@ -138,7 +163,12 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
                   );
                 }
               } catch (e) {
-                log('navigation error: $e');
+                LogService.log(
+                  level: 'ERROR',
+                  source: 'absen_page',
+                  action: 'navigation_error',
+                  message: 'navigation error: $e',
+                );
               }
             });
           } else {
@@ -150,7 +180,12 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
         }
         // log kept after handling
       } catch (e) {
-        log('loadCekModeData error: $e');
+        LogService.log(
+          level: 'ERROR',
+          source: 'absen_page',
+          action: 'loadCekModeData_error',
+          message: 'loadCekModeData error: $e',
+        );
       }
     }
   }
@@ -167,23 +202,43 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
         try {
           user = User.fromJson(json.decode(userJson));
         } catch (e) {
-          log('Error parsing user data in _cekModAbsen: $e');
+          LogService.log(
+            level: 'ERROR',
+            source: 'absen_page',
+            action: 'parse_user_error',
+            message: 'Error parsing user data in _cekModAbsen: $e',
+          );
         }
       }
 
       if (user == null) {
-        log('User data not found for _cekModAbsen');
+        LogService.log(
+          level: 'WARNING',
+          source: 'absen_page',
+          action: 'no_user_for_cekModAbsen',
+          message: 'User data not found for _cekModAbsen',
+        );
         return null;
       }
 
       final idpegawai = user.id_pegawai.toString();
-      log('Using idpegawai=$idpegawai for cek_mod_absen');
+      LogService.log(
+        level: 'DEBUG',
+        source: 'absen_page',
+        action: 'using_idpegawai',
+        message: 'Using idpegawai=$idpegawai for cek_mod_absen',
+      );
       final url = Uri.parse(
         '$kBaseUrl/api/cek_mod_absen.php?idpegawai=$idpegawai',
       );
       final r = await http.get(url);
       if (r.statusCode != 200) return null;
-      log('cek_mod_absen response: ${r.body}');
+      LogService.log(
+        level: 'INFO',
+        source: 'absen_page',
+        action: 'cek_mod_response',
+        message: 'cek_mod_absen response: ${r.body}',
+      );
       final parsed = json.decode(r.body) as Map<String, dynamic>;
       try {
         final idAbs = parsed['id_absen'] ?? parsed['idAbsen'];
@@ -198,16 +253,31 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
               final container = ProviderScope.containerOf(context);
               container.read(idAbsenProvider.notifier).setId(idStr);
             } catch (e) {
-              log('set provider id_absen from absen_page failed: $e');
+              LogService.log(
+                level: 'WARNING',
+                source: 'absen_page',
+                action: 'set_provider_id_absen_failed',
+                message: 'set provider id_absen from absen_page failed: $e',
+              );
             }
           }
         }
       } catch (e) {
-        log('save id_absen error: $e');
+        LogService.log(
+          level: 'ERROR',
+          source: 'absen_page',
+          action: 'save_id_absen_error',
+          message: 'save id_absen error: $e',
+        );
       }
       return parsed;
     } catch (e) {
-      log('cek_mod_absen error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'absen_page',
+        action: 'cek_mod_absen_error',
+        message: 'cek_mod_absen error: $e',
+      );
       return null;
     }
   }
@@ -222,7 +292,12 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
       return p != LocationPermission.denied &&
           p != LocationPermission.deniedForever;
     } catch (e) {
-      log('ensureGps error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'absen_page',
+        action: 'ensureGps_error',
+        message: 'ensureGps error: $e',
+      );
       return false;
     }
   }
@@ -288,7 +363,7 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
           Positioned.fill(
             child: Container(
               // subtle dark tint so content remains readable
-              color: Colors.black.withValues(alpha: 0.15),
+              color: Colors.black.withOpacity(0.15),
             ),
           ),
           SafeArea(
@@ -317,9 +392,10 @@ class _AbsenPageState extends ConsumerState<AbsenPage> {
                       Text('${ref.watch(absenPageProvider)!['message'] ?? ''}'),
                     ],
                     const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _startCekFlow,
-                      child: const Text('Retry'),
+                    gradientPillButton(
+                      label: 'Retry',
+                      onTap: _startCekFlow,
+                      icon: Icons.refresh,
                     ),
                   ],
                 ),

@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/absen_keluar.dart';
 
@@ -20,21 +21,32 @@ class AbsenKeluarService {
       final username = user.username;
       final cabang = user.id_cabang.toString();
       final divisi = user.divisi ?? '';
-      final jenisAturan =
-          (cekModeData != null && cekModeData['jenis_aturan'] != null)
-          ? cekModeData['jenis_aturan'].toString()
-          : user.jenis_aturan;
-
+      final jenisAturan = user.jenis_aturan;
+      // (cekModeData != null && cekModeData['jenis_aturan'] != null)
+      // ? cekModeData['jenis_aturan'].toString()
+      // : user.jenis_aturan;
       final lat = position?.latitude.toString() ?? '';
       final lon = position?.longitude.toString() ?? '';
 
-      log(
-        'Preparing multipart absen keluar: id=$idPegawai user=$username cabang=$cabang lat=$lat lon=$lon id_absen=$idAbsen',
+      LogService.log(
+        level: 'INFO',
+        source: 'AbsenKeluarService',
+        action: 'prepare_multipart',
+        message:
+            'Preparing multipart absen keluar: id=$idPegawai user=$username cabang=$cabang divisi=$divisi jenis_aturan=$jenisAturan lat=$lat lon=$lon id_absen=$idAbsen',
+        idPegawai: user.id_pegawai,
       );
 
-      final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/include/absenkeluarapi.php',
-      );
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUrl = prefs.getString('primary_url');
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'https://absencobra.cbsguard.co.id';
+      }
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
+      final uri = Uri.parse('$baseUrl/include/absenkeluarapi.php');
       final request = http.MultipartRequest('POST', uri);
 
       // Add form fields expected by the PHP
@@ -61,20 +73,45 @@ class AbsenKeluarService {
       if (resp.statusCode == 200) {
         try {
           final parsed = json.decode(resp.body);
-          log('absen keluar response: ${resp.body}');
+          LogService.log(
+            level: 'INFO',
+            source: 'AbsenKeluarService',
+            action: 'absen_response',
+            message: 'absen keluar response: ${resp.body}',
+            idPegawai: user.id_pegawai,
+          );
           return AbsenKeluarResponse.fromJson(parsed);
         } catch (e) {
-          log('absen keluar non-json response: ${resp.body}');
+          LogService.log(
+            level: 'WARNING',
+            source: 'AbsenKeluarService',
+            action: 'absen_response_non_json',
+            message: 'absen keluar non-json response: ${resp.body}',
+            idPegawai: user.id_pegawai,
+          );
           return AbsenKeluarResponse(message: 'Absen berhasil');
         }
       } else {
-        log('absen send failed ${resp.statusCode} ${resp.body}');
+        LogService.log(
+          level: 'ERROR',
+          source: 'AbsenKeluarService',
+          action: 'absen_send_failed',
+          message: 'absen send failed ${resp.statusCode} ${resp.body}',
+          idPegawai: user.id_pegawai,
+          data: {'status': resp.statusCode},
+        );
         return AbsenKeluarResponse(
           error: 'Gagal kirim absen: ${resp.statusCode}',
         );
       }
     } catch (e) {
-      log('sendAbsen error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'AbsenKeluarService',
+        action: 'send_absen_exception',
+        message: 'sendAbsen error: $e',
+        idPegawai: user.id_pegawai,
+      );
       return AbsenKeluarResponse(error: 'Error mengirim absen: $e');
     }
   }

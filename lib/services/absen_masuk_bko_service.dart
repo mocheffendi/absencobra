@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/absen_masuk.dart';
 
@@ -17,13 +18,12 @@ class AbsenMasukBkoService {
       final idPegawai = user.id_pegawai.toString();
       final username = user.username;
       final cabang = user.id_cabang.toString();
-      final jenisAturan =
-          (cekModeData != null && cekModeData['jenis_aturan'] != null)
-          ? cekModeData['jenis_aturan'].toString()
-          : user.jenis_aturan;
+      final jenisAturan = user.jenis_aturan;
+      // (cekModeData != null && cekModeData['jenis_aturan'] != null)
+      // ? cekModeData['jenis_aturan'].toString()
+      // : user.jenis_aturan;
       final idTmpt = user.id_tmpt.toString();
       final avatar = user.avatar;
-
       final lat = position?.latitude.toString() ?? '';
       final lon = position?.longitude.toString() ?? '';
 
@@ -39,13 +39,25 @@ class AbsenMasukBkoService {
         tmptDikunjungi = json.encode([1, 2, 3]);
       }
 
-      log(
-        "Preparing multipart absen: id_pegawai=$idPegawai username=$username cabang=$cabang latitude=$lat longitude=$lon jenis_aturan=$jenisAturan id_tmpt=$idTmpt avatar=$avatar tmpt_dikunjungi=$tmptDikunjungi",
+      LogService.log(
+        level: 'INFO',
+        source: 'AbsenMasukBkoService',
+        action: 'prepare_multipart',
+        message:
+            "Preparing multipart absen: id_pegawai=$idPegawai username=$username cabang=$cabang jenis_aturan=$jenisAturan latitude=$lat longitude=$lon id_tmpt=$idTmpt avatar=$avatar tmpt_dikunjungi=$tmptDikunjungi",
+        idPegawai: user.id_pegawai,
       );
 
-      final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/api/absenapi_bko.php',
-      );
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUrl = prefs.getString('primary_url');
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'https://absencobra.cbsguard.co.id';
+      }
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
+      final uri = Uri.parse('$baseUrl/api/absenapi_bko.php');
       final request = http.MultipartRequest('POST', uri);
 
       // Add expected form fields
@@ -69,20 +81,45 @@ class AbsenMasukBkoService {
       if (resp.statusCode == 200) {
         try {
           final parsed = json.decode(resp.body);
-          log('absen response: ${resp.body}');
+          LogService.log(
+            level: 'INFO',
+            source: 'AbsenMasukBkoService',
+            action: 'absen_response',
+            message: 'absen response: ${resp.body}',
+            idPegawai: user.id_pegawai,
+          );
           return AbsenMasukResponse.fromJson(parsed);
         } catch (e) {
-          log('absen non-json response: ${resp.body}');
+          LogService.log(
+            level: 'WARNING',
+            source: 'AbsenMasukBkoService',
+            action: 'absen_response_non_json',
+            message: 'absen non-json response: ${resp.body}',
+            idPegawai: user.id_pegawai,
+          );
           return AbsenMasukResponse(message: 'Absen berhasil');
         }
       } else {
-        log('absen send failed ${resp.statusCode} ${resp.body}');
+        LogService.log(
+          level: 'ERROR',
+          source: 'AbsenMasukBkoService',
+          action: 'absen_send_failed',
+          message: 'absen send failed ${resp.statusCode} ${resp.body}',
+          idPegawai: user.id_pegawai,
+          data: {'status': resp.statusCode},
+        );
         return AbsenMasukResponse(
           error: 'Gagal kirim absen: ${resp.statusCode}',
         );
       }
     } catch (e) {
-      log('sendAbsen error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'AbsenMasukBkoService',
+        action: 'send_absen_exception',
+        message: 'sendAbsen error: $e',
+        idPegawai: user.id_pegawai,
+      );
       return AbsenMasukResponse(error: 'Error mengirim absen: $e');
     }
   }

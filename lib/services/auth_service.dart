@@ -1,32 +1,48 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 
 class AuthService {
   static Future<User?> login(Map<String, dynamic> form) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUrl = prefs.getString('primary_url');
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'https://absencobra.cbsguard.co.id';
+      }
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
       final response = await http.post(
-        Uri.parse('https://absencobra.cbsguard.co.id/api/auth.php'),
+        Uri.parse('$baseUrl/api/auth.php'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: form,
       );
 
-      log(
-        'AuthService.login - Status: ${response.statusCode}',
-        name: 'AuthService.login',
+      LogService.log(
+        level: 'INFO',
+        source: 'AuthService',
+        action: 'login',
+        message: 'AuthService.login - Status: ${response.statusCode}',
       );
-      log(
-        'AuthService.login - Response: ${response.body}',
-        name: 'AuthService.login',
+      LogService.log(
+        level: 'INFO',
+        source: 'AuthService',
+        action: 'login',
+        message: 'AuthService.login - Response: ${response.body}',
       );
 
       if (response.statusCode == 200 && response.body.isNotEmpty) {
         final data = json.decode(response.body);
-        log(
-          'AuthService.login - Decoded data: $data',
-          name: 'AuthService.login',
+        LogService.log(
+          level: 'DEBUG',
+          source: 'AuthService',
+          action: 'login',
+          message: 'AuthService.login - Decoded data: $data',
         );
 
         // Check if login was successful by looking for success indicator
@@ -48,7 +64,7 @@ class AuthService {
           throw Exception('Data user tidak ditemukan dalam response');
         }
 
-        final user = User.fromJson(userData);
+        final user = User.safeFromJson(userData as Map<String, dynamic>);
 
         // Set token dari root level response jika ada
         final token = data['token'] as String?;
@@ -65,19 +81,34 @@ class AuthService {
       }
     } on SocketException catch (e) {
       // Network-level error: provide a friendly message
-      log('AuthService.login network error: $e', name: 'AuthService.login');
+      LogService.log(
+        level: 'ERROR',
+        source: 'AuthService',
+        action: 'login_network_error',
+        message: 'AuthService.login network error: $e',
+      );
       throw Exception(
         'Internet is disconnected, please check your internet connection',
       );
     } on http.ClientException catch (e) {
       // HTTP client error (DNS, connection refused, etc.)
-      log('AuthService.login http client error: $e', name: 'AuthService.login');
+      LogService.log(
+        level: 'ERROR',
+        source: 'AuthService',
+        action: 'login_http_client_error',
+        message: 'AuthService.login http client error: $e',
+      );
       throw Exception(
         'Internet is disconnected, please check your internet connection',
       );
     } catch (e, st) {
-      log('AuthService.login error: $e', name: 'AuthService.login');
-      log('$st', name: 'AuthService.login');
+      LogService.log(
+        level: 'ERROR',
+        source: 'AuthService',
+        action: 'login_error',
+        message: 'AuthService.login error: $e',
+        data: {'stack': '$st'},
+      );
       if (e is Exception) {
         // Preserve non-network exception messages (e.g., API returned error)
         rethrow;

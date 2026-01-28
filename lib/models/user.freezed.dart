@@ -24,21 +24,28 @@ mixin _$User {
   int get id_pegawai => throw _privateConstructorUsedError;
   String? get nama => throw _privateConstructorUsedError;
   String get nip => throw _privateConstructorUsedError;
+  String? get nik => throw _privateConstructorUsedError;
+  String? get agama => throw _privateConstructorUsedError;
+  String? get telp => throw _privateConstructorUsedError;
+  String? get no_rekening => throw _privateConstructorUsedError;
   String? get email => throw _privateConstructorUsedError;
   String? get alamat => throw _privateConstructorUsedError;
   String get username => throw _privateConstructorUsedError;
   int get id_jabatan => throw _privateConstructorUsedError;
+  String? get jabatan => throw _privateConstructorUsedError;
   int get id_tmpt => throw _privateConstructorUsedError;
   String? get tmpt_tugas => throw _privateConstructorUsedError;
   String? get tgl_lahir => throw _privateConstructorUsedError;
   String? get divisi => throw _privateConstructorUsedError;
   int get id_cabang => throw _privateConstructorUsedError;
+  String? get cabang => throw _privateConstructorUsedError;
   String get avatar => throw _privateConstructorUsedError;
   String? get avatar_lokal => throw _privateConstructorUsedError;
   String? get kode_jam => throw _privateConstructorUsedError;
   String? get status => throw _privateConstructorUsedError;
   String? get tgl_joint => throw _privateConstructorUsedError;
   int? get id_jadwal => throw _privateConstructorUsedError;
+  String? get jadwal => throw _privateConstructorUsedError;
   String get jenis_aturan => throw _privateConstructorUsedError;
   String? get tmpt_dikunjungi => throw _privateConstructorUsedError;
   String? get token => throw _privateConstructorUsedError;
@@ -61,21 +68,28 @@ abstract class $UserCopyWith<$Res> {
     int id_pegawai,
     String? nama,
     String nip,
+    String? nik,
+    String? agama,
+    String? telp,
+    String? no_rekening,
     String? email,
     String? alamat,
     String username,
     int id_jabatan,
+    String? jabatan,
     int id_tmpt,
     String? tmpt_tugas,
     String? tgl_lahir,
     String? divisi,
     int id_cabang,
+    String? cabang,
     String avatar,
     String? avatar_lokal,
     String? kode_jam,
     String? status,
     String? tgl_joint,
     int? id_jadwal,
+    String? jadwal,
     String jenis_aturan,
     String? tmpt_dikunjungi,
     String? token,
@@ -100,21 +114,28 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
     Object? id_pegawai = null,
     Object? nama = freezed,
     Object? nip = null,
+    Object? nik = freezed,
+    Object? agama = freezed,
+    Object? telp = freezed,
+    Object? no_rekening = freezed,
     Object? email = freezed,
     Object? alamat = freezed,
     Object? username = null,
     Object? id_jabatan = null,
+    Object? jabatan = freezed,
     Object? id_tmpt = null,
     Object? tmpt_tugas = freezed,
     Object? tgl_lahir = freezed,
     Object? divisi = freezed,
     Object? id_cabang = null,
+    Object? cabang = freezed,
     Object? avatar = null,
     Object? avatar_lokal = freezed,
     Object? kode_jam = freezed,
     Object? status = freezed,
     Object? tgl_joint = freezed,
     Object? id_jadwal = freezed,
+    Object? jadwal = freezed,
     Object? jenis_aturan = null,
     Object? tmpt_dikunjungi = freezed,
     Object? token = freezed,
@@ -133,6 +154,22 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
                 ? _value.nip
                 : nip // ignore: cast_nullable_to_non_nullable
                       as String,
+            nik: freezed == nik
+                ? _value.nik
+                : nik // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            agama: freezed == agama
+                ? _value.agama
+                : agama // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            telp: freezed == telp
+                ? _value.telp
+                : telp // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            no_rekening: freezed == no_rekening
+                ? _value.no_rekening
+                : no_rekening // ignore: cast_nullable_to_non_nullable
+                      as String?,
             email: freezed == email
                 ? _value.email
                 : email // ignore: cast_nullable_to_non_nullable
@@ -149,6 +186,10 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
                 ? _value.id_jabatan
                 : id_jabatan // ignore: cast_nullable_to_non_nullable
                       as int,
+            jabatan: freezed == jabatan
+                ? _value.jabatan
+                : jabatan // ignore: cast_nullable_to_non_nullable
+                      as String?,
             id_tmpt: null == id_tmpt
                 ? _value.id_tmpt
                 : id_tmpt // ignore: cast_nullable_to_non_nullable
@@ -169,6 +210,10 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
                 ? _value.id_cabang
                 : id_cabang // ignore: cast_nullable_to_non_nullable
                       as int,
+            cabang: freezed == cabang
+                ? _value.cabang
+                : cabang // ignore: cast_nullable_to_non_nullable
+                      as String?,
             avatar: null == avatar
                 ? _value.avatar
                 : avatar // ignore: cast_nullable_to_non_nullable
@@ -193,6 +238,10 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
                 ? _value.id_jadwal
                 : id_jadwal // ignore: cast_nullable_to_non_nullable
                       as int?,
+            jadwal: freezed == jadwal
+                ? _value.jadwal
+                : jadwal // ignore: cast_nullable_to_non_nullable
+                      as String?,
             jenis_aturan: null == jenis_aturan
                 ? _value.jenis_aturan
                 : jenis_aturan // ignore: cast_nullable_to_non_nullable
@@ -223,21 +272,28 @@ abstract class _$$UserImplCopyWith<$Res> implements $UserCopyWith<$Res> {
     int id_pegawai,
     String? nama,
     String nip,
+    String? nik,
+    String? agama,
+    String? telp,
+    String? no_rekening,
     String? email,
     String? alamat,
     String username,
     int id_jabatan,
+    String? jabatan,
     int id_tmpt,
     String? tmpt_tugas,
     String? tgl_lahir,
     String? divisi,
     int id_cabang,
+    String? cabang,
     String avatar,
     String? avatar_lokal,
     String? kode_jam,
     String? status,
     String? tgl_joint,
     int? id_jadwal,
+    String? jadwal,
     String jenis_aturan,
     String? tmpt_dikunjungi,
     String? token,
@@ -259,21 +315,28 @@ class __$$UserImplCopyWithImpl<$Res>
     Object? id_pegawai = null,
     Object? nama = freezed,
     Object? nip = null,
+    Object? nik = freezed,
+    Object? agama = freezed,
+    Object? telp = freezed,
+    Object? no_rekening = freezed,
     Object? email = freezed,
     Object? alamat = freezed,
     Object? username = null,
     Object? id_jabatan = null,
+    Object? jabatan = freezed,
     Object? id_tmpt = null,
     Object? tmpt_tugas = freezed,
     Object? tgl_lahir = freezed,
     Object? divisi = freezed,
     Object? id_cabang = null,
+    Object? cabang = freezed,
     Object? avatar = null,
     Object? avatar_lokal = freezed,
     Object? kode_jam = freezed,
     Object? status = freezed,
     Object? tgl_joint = freezed,
     Object? id_jadwal = freezed,
+    Object? jadwal = freezed,
     Object? jenis_aturan = null,
     Object? tmpt_dikunjungi = freezed,
     Object? token = freezed,
@@ -292,6 +355,22 @@ class __$$UserImplCopyWithImpl<$Res>
             ? _value.nip
             : nip // ignore: cast_nullable_to_non_nullable
                   as String,
+        nik: freezed == nik
+            ? _value.nik
+            : nik // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        agama: freezed == agama
+            ? _value.agama
+            : agama // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        telp: freezed == telp
+            ? _value.telp
+            : telp // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        no_rekening: freezed == no_rekening
+            ? _value.no_rekening
+            : no_rekening // ignore: cast_nullable_to_non_nullable
+                  as String?,
         email: freezed == email
             ? _value.email
             : email // ignore: cast_nullable_to_non_nullable
@@ -308,6 +387,10 @@ class __$$UserImplCopyWithImpl<$Res>
             ? _value.id_jabatan
             : id_jabatan // ignore: cast_nullable_to_non_nullable
                   as int,
+        jabatan: freezed == jabatan
+            ? _value.jabatan
+            : jabatan // ignore: cast_nullable_to_non_nullable
+                  as String?,
         id_tmpt: null == id_tmpt
             ? _value.id_tmpt
             : id_tmpt // ignore: cast_nullable_to_non_nullable
@@ -328,6 +411,10 @@ class __$$UserImplCopyWithImpl<$Res>
             ? _value.id_cabang
             : id_cabang // ignore: cast_nullable_to_non_nullable
                   as int,
+        cabang: freezed == cabang
+            ? _value.cabang
+            : cabang // ignore: cast_nullable_to_non_nullable
+                  as String?,
         avatar: null == avatar
             ? _value.avatar
             : avatar // ignore: cast_nullable_to_non_nullable
@@ -352,6 +439,10 @@ class __$$UserImplCopyWithImpl<$Res>
             ? _value.id_jadwal
             : id_jadwal // ignore: cast_nullable_to_non_nullable
                   as int?,
+        jadwal: freezed == jadwal
+            ? _value.jadwal
+            : jadwal // ignore: cast_nullable_to_non_nullable
+                  as String?,
         jenis_aturan: null == jenis_aturan
             ? _value.jenis_aturan
             : jenis_aturan // ignore: cast_nullable_to_non_nullable
@@ -376,21 +467,28 @@ class _$UserImpl implements _User {
     required this.id_pegawai,
     this.nama,
     required this.nip,
+    this.nik,
+    this.agama,
+    this.telp,
+    this.no_rekening,
     this.email,
     this.alamat,
     required this.username,
     required this.id_jabatan,
+    this.jabatan,
     required this.id_tmpt,
     this.tmpt_tugas,
     this.tgl_lahir,
     this.divisi,
     required this.id_cabang,
+    this.cabang,
     required this.avatar,
     this.avatar_lokal,
     this.kode_jam,
     this.status,
     this.tgl_joint,
     this.id_jadwal,
+    this.jadwal,
     required this.jenis_aturan,
     this.tmpt_dikunjungi,
     this.token,
@@ -406,6 +504,14 @@ class _$UserImpl implements _User {
   @override
   final String nip;
   @override
+  final String? nik;
+  @override
+  final String? agama;
+  @override
+  final String? telp;
+  @override
+  final String? no_rekening;
+  @override
   final String? email;
   @override
   final String? alamat;
@@ -413,6 +519,8 @@ class _$UserImpl implements _User {
   final String username;
   @override
   final int id_jabatan;
+  @override
+  final String? jabatan;
   @override
   final int id_tmpt;
   @override
@@ -423,6 +531,8 @@ class _$UserImpl implements _User {
   final String? divisi;
   @override
   final int id_cabang;
+  @override
+  final String? cabang;
   @override
   final String avatar;
   @override
@@ -436,6 +546,8 @@ class _$UserImpl implements _User {
   @override
   final int? id_jadwal;
   @override
+  final String? jadwal;
+  @override
   final String jenis_aturan;
   @override
   final String? tmpt_dikunjungi;
@@ -444,7 +556,7 @@ class _$UserImpl implements _User {
 
   @override
   String toString() {
-    return 'User(id_pegawai: $id_pegawai, nama: $nama, nip: $nip, email: $email, alamat: $alamat, username: $username, id_jabatan: $id_jabatan, id_tmpt: $id_tmpt, tmpt_tugas: $tmpt_tugas, tgl_lahir: $tgl_lahir, divisi: $divisi, id_cabang: $id_cabang, avatar: $avatar, kode_jam: $kode_jam, status: $status, tgl_joint: $tgl_joint, id_jadwal: $id_jadwal, jenis_aturan: $jenis_aturan, tmpt_dikunjungi: $tmpt_dikunjungi, token: $token)';
+    return 'User(id_pegawai: $id_pegawai, nama: $nama, nip: $nip, nik: $nik, agama: $agama, telp: $telp, no_rekening: $no_rekening, email: $email, alamat: $alamat, username: $username, id_jabatan: $id_jabatan, jabatan: $jabatan, id_tmpt: $id_tmpt, tmpt_tugas: $tmpt_tugas, tgl_lahir: $tgl_lahir, divisi: $divisi, id_cabang: $id_cabang, cabang: $cabang, avatar: $avatar, avatar_lokal: $avatar_lokal, kode_jam: $kode_jam, status: $status, tgl_joint: $tgl_joint, id_jadwal: $id_jadwal, jadwal: $jadwal, jenis_aturan: $jenis_aturan, tmpt_dikunjungi: $tmpt_dikunjungi, token: $token)';
   }
 
   @override
@@ -456,12 +568,18 @@ class _$UserImpl implements _User {
                 other.id_pegawai == id_pegawai) &&
             (identical(other.nama, nama) || other.nama == nama) &&
             (identical(other.nip, nip) || other.nip == nip) &&
+            (identical(other.nik, nik) || other.nik == nik) &&
+            (identical(other.agama, agama) || other.agama == agama) &&
+            (identical(other.telp, telp) || other.telp == telp) &&
+            (identical(other.no_rekening, no_rekening) ||
+                other.no_rekening == no_rekening) &&
             (identical(other.email, email) || other.email == email) &&
             (identical(other.alamat, alamat) || other.alamat == alamat) &&
             (identical(other.username, username) ||
                 other.username == username) &&
             (identical(other.id_jabatan, id_jabatan) ||
                 other.id_jabatan == id_jabatan) &&
+            (identical(other.jabatan, jabatan) || other.jabatan == jabatan) &&
             (identical(other.id_tmpt, id_tmpt) || other.id_tmpt == id_tmpt) &&
             (identical(other.tmpt_tugas, tmpt_tugas) ||
                 other.tmpt_tugas == tmpt_tugas) &&
@@ -470,6 +588,7 @@ class _$UserImpl implements _User {
             (identical(other.divisi, divisi) || other.divisi == divisi) &&
             (identical(other.id_cabang, id_cabang) ||
                 other.id_cabang == id_cabang) &&
+            (identical(other.cabang, cabang) || other.cabang == cabang) &&
             (identical(other.avatar, avatar) || other.avatar == avatar) &&
             (identical(other.avatar_lokal, avatar_lokal) ||
                 other.avatar_lokal == avatar_lokal) &&
@@ -480,6 +599,7 @@ class _$UserImpl implements _User {
                 other.tgl_joint == tgl_joint) &&
             (identical(other.id_jadwal, id_jadwal) ||
                 other.id_jadwal == id_jadwal) &&
+            (identical(other.jadwal, jadwal) || other.jadwal == jadwal) &&
             (identical(other.jenis_aturan, jenis_aturan) ||
                 other.jenis_aturan == jenis_aturan) &&
             (identical(other.tmpt_dikunjungi, tmpt_dikunjungi) ||
@@ -494,21 +614,28 @@ class _$UserImpl implements _User {
     id_pegawai,
     nama,
     nip,
+    nik,
+    agama,
+    telp,
+    no_rekening,
     email,
     alamat,
     username,
     id_jabatan,
+    jabatan,
     id_tmpt,
     tmpt_tugas,
     tgl_lahir,
     divisi,
     id_cabang,
+    cabang,
     avatar,
     avatar_lokal,
     kode_jam,
     status,
     tgl_joint,
     id_jadwal,
+    jadwal,
     jenis_aturan,
     tmpt_dikunjungi,
     token,
@@ -533,21 +660,28 @@ abstract class _User implements User {
     required final int id_pegawai,
     final String? nama,
     required final String nip,
+    final String? nik,
+    final String? agama,
+    final String? telp,
+    final String? no_rekening,
     final String? email,
     final String? alamat,
     required final String username,
     required final int id_jabatan,
+    final String? jabatan,
     required final int id_tmpt,
     final String? tmpt_tugas,
     final String? tgl_lahir,
     final String? divisi,
     required final int id_cabang,
+    final String? cabang,
     required final String avatar,
     final String? avatar_lokal,
     final String? kode_jam,
     final String? status,
     final String? tgl_joint,
     final int? id_jadwal,
+    final String? jadwal,
     required final String jenis_aturan,
     final String? tmpt_dikunjungi,
     final String? token,
@@ -562,6 +696,14 @@ abstract class _User implements User {
   @override
   String get nip;
   @override
+  String? get nik;
+  @override
+  String? get agama;
+  @override
+  String? get telp;
+  @override
+  String? get no_rekening;
+  @override
   String? get email;
   @override
   String? get alamat;
@@ -569,6 +711,8 @@ abstract class _User implements User {
   String get username;
   @override
   int get id_jabatan;
+  @override
+  String? get jabatan;
   @override
   int get id_tmpt;
   @override
@@ -579,6 +723,8 @@ abstract class _User implements User {
   String? get divisi;
   @override
   int get id_cabang;
+  @override
+  String? get cabang;
   @override
   String get avatar;
   @override
@@ -591,6 +737,8 @@ abstract class _User implements User {
   String? get tgl_joint;
   @override
   int? get id_jadwal;
+  @override
+  String? get jadwal;
   @override
   String get jenis_aturan;
   @override

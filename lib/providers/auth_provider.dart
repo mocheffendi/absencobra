@@ -1,4 +1,4 @@
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
@@ -26,14 +26,21 @@ class AuthNotifier extends AsyncNotifier<User?> {
         final user = User.fromJson(userData);
         // Pastikan user memiliki token yang valid
         if (user.token == token) {
-          log(
-            'User session restored from SharedPreferences',
-            name: 'AuthNotifier.build',
+          LogService.log(
+            level: 'INFO',
+            source: 'AuthNotifier',
+            action: 'build_restore_session',
+            message: 'User session restored from SharedPreferences',
           );
           return user;
         }
       } catch (e) {
-        log('Error restoring user session: $e', name: 'AuthNotifier.build');
+        LogService.log(
+          level: 'ERROR',
+          source: 'AuthNotifier',
+          action: 'build_restore_error',
+          message: 'Error restoring user session: $e',
+        );
         // Jika ada error, bersihkan data yang tidak valid
         await prefs.remove('user');
         await prefs.remove('token');
@@ -100,9 +107,11 @@ class AuthNotifier extends AsyncNotifier<User?> {
       // by calling their reset methods if they exist, or by using ref.invalidate
       // However, since we're in a Notifier, we need to handle this differently
     } catch (e) {
-      log(
-        'Error resetting providers: $e',
-        name: 'AuthNotifier._resetUserRelatedProviders',
+      LogService.log(
+        level: 'ERROR',
+        source: 'AuthNotifier',
+        action: '_resetUserRelatedProviders',
+        message: 'Error resetting providers: $e',
       );
     }
   }

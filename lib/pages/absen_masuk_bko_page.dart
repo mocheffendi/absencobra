@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:cobra_apps/pages/dashboard_page.dart';
 import 'package:cobra_apps/services/absen_masuk_bko_service.dart';
+import 'package:cobra_apps/services/applog.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
@@ -498,7 +499,13 @@ class _AbsenMasukBkoPageState extends ConsumerState<AbsenMasukBkoPage> {
   }
 
   Future<void> _submit() async {
-    log('AbsenMasukBkoPage: _submit dipanggil');
+    LogService.log(
+      level: 'INFO',
+      source: 'absen_masuk_bko_page',
+      action: 'submit absen masuk bko',
+      message: 'submit absen masuk bko is call',
+    );
+
     final notifier = ref.read(absenMasukProvider.notifier);
     final state = ref.read(absenMasukProvider);
 
@@ -557,6 +564,13 @@ class _AbsenMasukBkoPageState extends ConsumerState<AbsenMasukBkoPage> {
       position: state.currentPosition,
       imageFile: compressedFile ?? state.imageFile!,
       cekModeData: null,
+    );
+
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_masuk_bko_page',
+      action: 'hasil submit absen bko masuk',
+      message: 'Hasil submit absen bko masuk : $result',
     );
 
     notifier.setLoading(false);

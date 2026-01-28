@@ -1,5 +1,5 @@
 import 'package:camera/camera.dart';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'package:flutter/material.dart';
 
 class CameraUtil {
@@ -29,7 +29,12 @@ class CameraUtil {
       await controller.initialize();
       return controller;
     } on CameraException catch (e) {
-      log('CameraException: ${e.code} - ${e.description}');
+      LogService.log(
+        level: 'ERROR',
+        source: 'camera_util',
+        action: 'camera_exception',
+        message: 'CameraException: ${e.code} - ${e.description}',
+      );
       String errorMessage = 'Gagal mengakses kamera';
       switch (e.code) {
         case 'CameraAccessDenied':
@@ -82,7 +87,12 @@ class CameraUtil {
       );
       return null;
     } catch (e) {
-      log('Camera init unexpected error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'camera_util',
+        action: 'init_unexpected',
+        message: 'Camera init unexpected error: $e',
+      );
       String errorMessage = 'Gagal inisialisasi kamera';
       if (e.toString().contains('No cameras found')) {
         errorMessage = 'Tidak ada kamera tersedia di device ini';

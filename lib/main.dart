@@ -1,3 +1,7 @@
+import 'dart:developer';
+
+import 'package:cobra_apps/pages/create_pegawai.dart';
+import 'package:cobra_apps/pages/cuti_page.dart';
 import 'package:cobra_apps/pages/patroli_page.dart';
 import 'package:cobra_apps/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
@@ -11,12 +15,51 @@ import 'package:cobra_apps/pages/absen_page.dart';
 import 'package:cobra_apps/pages/kinerja_page.dart';
 // import 'package:cobra_apps/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:cobra_apps/services/url_config_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final env = const String.fromEnvironment('ENV', defaultValue: 'dev');
   await dotenv.load(fileName: '.env.$env');
+  // Resolve and cache base URL configuration early so it's available in prefs
+  try {
+    final resolved = await UrlConfigService.resolveBaseUrl();
+    // Log for debug; UrlConfigService also mirrors config to prefs
+    log('Resolved base URL: $resolved');
+  } catch (e) {
+    // Non-fatal: app will continue but remote config wasn't resolved
+    log('UrlConfigService: resolveBaseUrl failed: $e');
+  }
+  // Request runtime permissions early on app startup
+  await _requestPermissions();
   runApp(const ProviderScope(child: MyApp()));
+}
+
+Future<void> _requestPermissions() async {
+  try {
+    final permissions = [
+      Permission.location,
+      Permission.camera,
+      Permission.storage,
+      Permission.microphone,
+    ];
+
+    final statuses = await permissions.request();
+    statuses.forEach((perm, status) {
+      log('Permission $perm: $status');
+    });
+
+    final anyPermanentlyDenied = statuses.values.any(
+      (s) => s.isPermanentlyDenied,
+    );
+    if (anyPermanentlyDenied) {
+      // If any permission is permanently denied, direct user to app settings
+      await openAppSettings();
+    }
+  } catch (e) {
+    log('Permission request failed: $e');
+  }
 }
 
 class MyApp extends ConsumerWidget {
@@ -51,10 +94,12 @@ class MyApp extends ConsumerWidget {
         '/absen': (context) => const AbsenPage(),
         '/patrol': (context) => const PatrolPage(),
         '/patroli': (context) => const PatroliPage(),
+        '/cuti': (context) => const CutiPage(),
         '/dashboard': (context) => const DashboardPage(),
         '/kinerja': (context) => const KinerjaPage(),
         '/account_setting': (context) => const AccountSettingPage(),
         '/slip_gaji': (context) => const SlipGajiPage(),
+        '/create_pegawai': (context) => const CreatePegawaiPage(),
       },
       home: const AuthWrapper(),
     );

@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/face.dart';
 
@@ -11,9 +12,16 @@ class FaceApiService {
     required User user,
   }) async {
     try {
-      final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/include/faceapi.php',
-      );
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUrl = prefs.getString('primary_url');
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'https://absencobra.cbsguard.co.id';
+      }
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
+      final uri = Uri.parse('$baseUrl/include/faceapi.php');
 
       final request = http.MultipartRequest('POST', uri);
 
@@ -21,8 +29,13 @@ class FaceApiService {
       request.fields['id_pegawai'] = user.id_pegawai.toString();
       request.fields['username'] = user.username;
       request.fields['avatar'] = user.avatar;
-      log(
-        'id_pegawai: ${user.id_pegawai}, username: ${user.username}, avatar: ${user.avatar}',
+      LogService.log(
+        level: 'DEBUG',
+        source: 'FaceApiService',
+        action: 'upload_prepare',
+        message:
+            'id_pegawai: ${user.id_pegawai}, username: ${user.username}, avatar: ${user.avatar}',
+        idPegawai: user.id_pegawai,
       );
 
       // Attach file as 'foto'
@@ -56,14 +69,26 @@ class FaceApiService {
               }
             }
           }
-          log('upload response: ${resp.body}');
+          LogService.log(
+            level: 'INFO',
+            source: 'FaceApiService',
+            action: 'upload_response',
+            message: 'upload response: ${resp.body}',
+            idPegawai: user.id_pegawai,
+          );
           return FaceApiResponse(
             percent: pct,
             message: parsed['message'] ?? 'Upload berhasil',
             response: resp.body,
           );
         } catch (e) {
-          log('parse upload response failed: $e');
+          LogService.log(
+            level: 'WARNING',
+            source: 'FaceApiService',
+            action: 'parse_response_failed',
+            message: 'parse upload response failed: $e',
+            idPegawai: user.id_pegawai,
+          );
           return FaceApiResponse(
             percent: null,
             message: 'Upload selesai',
@@ -71,14 +96,27 @@ class FaceApiService {
           );
         }
       } else {
-        log('upload failed status: ${resp.statusCode} body: ${resp.body}');
+        LogService.log(
+          level: 'ERROR',
+          source: 'FaceApiService',
+          action: 'upload_failed',
+          message:
+              'upload failed status: ${resp.statusCode} body: ${resp.body}',
+          idPegawai: user.id_pegawai,
+          data: {'status': resp.statusCode},
+        );
         return FaceApiResponse(
           error: 'Upload failed: ${resp.statusCode}',
           response: resp.body,
         );
       }
     } catch (e) {
-      log('[FaceApiService] upload error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'FaceApiService',
+        action: 'upload_exception',
+        message: '[FaceApiService] upload error: $e',
+      );
       return FaceApiResponse(error: 'Upload error: $e');
     }
   }

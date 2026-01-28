@@ -1,6 +1,7 @@
 import 'dart:developer';
 import 'dart:ui' as ui;
 
+import 'package:cobra_apps/widgets/gradient_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/slip_gaji_provider.dart';
@@ -79,6 +80,7 @@ class _SlipGajiPageState extends ConsumerState<SlipGajiPage> {
                   Row(
                     children: [
                       Expanded(
+                        flex: 5,
                         child: InkWell(
                           onTap: () async {
                             final now = DateTime.now();
@@ -110,10 +112,19 @@ class _SlipGajiPageState extends ConsumerState<SlipGajiPage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      ElevatedButton(
-                        onPressed: isLoading ? null : () => _fetchAndPreview(),
-                        child: const Text('PDF'),
+                      Expanded(
+                        flex: 2,
+                        child: gradientPillButton(
+                          label: 'Pdf',
+                          onTap: _fetchAndPreview,
+                          icon: Icons.picture_as_pdf_rounded,
+                          colors: const [Color(0xff2dd7a6), Color(0xff46a6ff)],
+                        ),
                       ),
+                      // ElevatedButton(
+                      //   onPressed: isLoading ? null : () => _fetchAndPreview(),
+                      //   child: const Text('PDF'),
+                      // ),
                     ],
                   ),
                   // const SizedBox(height: 16),

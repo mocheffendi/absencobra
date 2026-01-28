@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cobra_apps/models/user.dart';
 import 'package:cobra_apps/pages/dashboard_page.dart';
 import 'package:cobra_apps/utility/settings.dart';
 import 'package:flutter/material.dart';
@@ -211,9 +212,22 @@ class _ScanPulangPageState extends ConsumerState<ScanPulangPage> {
     try {
       log("coba validasi qr");
       final prefs = await SharedPreferences.getInstance();
-      final idPegawai = prefs.getString('id_pegawai') ?? '1';
+      String idPegawai = '1';
+      final userJson = prefs.getString('user');
+      if (userJson != null && userJson.isNotEmpty) {
+        try {
+          final user = User.fromJson(json.decode(userJson));
+          idPegawai = user.id_pegawai.toString();
+        } catch (e) {
+          idPegawai = prefs.getString('id_pegawai') ?? '1';
+        }
+      } else {
+        idPegawai = prefs.getString('id_pegawai') ?? '1';
+      }
       final jenis = 'pulang'; // or 'pulang' for absen pulang
 
+      // final user = ref.watch(userPrefsProvider);
+      // final idPegawai = user?['idPegawai']?.toString();
       // Build explicit Map<String,String> and send raw JSON bodyString
       final requestMap = <String, String>{
         'qr': code.toString(),

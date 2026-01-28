@@ -1,23 +1,53 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LemburService {
   static Future<List<Map<String, String>>> getLemburData(
     String idPegawai,
   ) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUrl = prefs.getString('primary_url');
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'https://absencobra.cbsguard.co.id';
+      }
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
       final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/api/get_tb_absen_bko.php?id_pegawai=$idPegawai',
+        '$baseUrl/api/get_tb_absen_bko.php?id_pegawai=$idPegawai',
       );
-      log('LemburService: Calling API: $uri');
+      LogService.log(
+        level: 'INFO',
+        source: 'LemburService',
+        action: 'call_api',
+        message: 'LemburService: Calling API: $uri',
+      );
       final r = await http.get(uri);
-      log('LemburService: API response status: ${r.statusCode}');
-      log('LemburService: API response body: ${r.body}');
+      LogService.log(
+        level: 'INFO',
+        source: 'LemburService',
+        action: 'api_status',
+        message: 'LemburService: API response status: ${r.statusCode}',
+      );
+      LogService.log(
+        level: 'INFO',
+        source: 'LemburService',
+        action: 'api_body',
+        message: 'LemburService: API response body: ${r.body}',
+      );
 
       if (r.statusCode == 200) {
         final body = json.decode(r.body);
-        log('LemburService: Decoded body: $body');
+        LogService.log(
+          level: 'INFO',
+          source: 'LemburService',
+          action: 'decoded_body',
+          message: 'LemburService: Decoded body: $body',
+        );
         List<dynamic> items = [];
         if (body is Map && body['data'] is List) {
           items = body['data'];
@@ -27,7 +57,12 @@ class LemburService {
           items = [body];
         }
 
-        log('LemburService: Found ${items.length} items in response');
+        LogService.log(
+          level: 'INFO',
+          source: 'LemburService',
+          action: 'found_items',
+          message: 'LemburService: Found ${items.length} items in response',
+        );
 
         // Map to our simplified structure: tanggal (harimasuk), in (wktmasuk), out (wktpulang/wktkeluar)
         final List<Map<String, String>> rows = items.map<Map<String, String>>((
@@ -78,20 +113,35 @@ class LemburService {
               'in': masuk,
               'out': keluar,
             };
-            log('LemburService: Mapped item: $m -> $result');
+            LogService.log(
+              level: 'DEBUG',
+              source: 'LemburService',
+              action: 'mapped_item',
+              message: 'LemburService: Mapped item: $m -> $result',
+            );
             return result;
           } catch (_) {
             return {'tanggal': '', 'in': '', 'out': ''};
           }
         }).toList();
 
-        log('LemburService: Returning ${rows.length} mapped rows');
+        LogService.log(
+          level: 'INFO',
+          source: 'LemburService',
+          action: 'return_rows',
+          message: 'LemburService: Returning ${rows.length} mapped rows',
+        );
         return rows;
       } else {
         throw Exception('Failed to load absen data');
       }
     } catch (e) {
-      log('LemburService: Error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'LemburService',
+        action: 'error',
+        message: 'LemburService: Error: $e',
+      );
       throw Exception('Error loading absen data: $e');
     }
   }
@@ -106,19 +156,38 @@ class LemburService {
     final todayStr2 =
         '${today.day.toString().padLeft(2, '0')}-${today.month.toString().padLeft(2, '0')}-${today.year}'; // DD-MM-YYYY
 
-    log(
-      'LemburService: Looking for today\'s data with dates: $todayStr1 or $todayStr2',
+    LogService.log(
+      level: 'INFO',
+      source: 'LemburService',
+      action: 'find_today',
+      message:
+          'LemburService: Looking for today\'s data with dates: $todayStr1 or $todayStr2',
     );
 
     for (final r in absenData) {
       final t = r['tanggal'] ?? '';
-      log('LemburService: Checking record with date: $t');
+      LogService.log(
+        level: 'DEBUG',
+        source: 'LemburService',
+        action: 'check_record',
+        message: 'LemburService: Checking record with date: $t',
+      );
       if (t == todayStr1 || t == todayStr2) {
-        log('LemburService: Found today\'s record: $r');
+        LogService.log(
+          level: 'INFO',
+          source: 'LemburService',
+          action: 'found_today',
+          message: 'LemburService: Found today\'s record: $r',
+        );
         return r;
       }
     }
-    log('LemburService: No today\'s record found');
+    LogService.log(
+      level: 'INFO',
+      source: 'LemburService',
+      action: 'no_today_found',
+      message: 'LemburService: No today\'s record found',
+    );
     return null;
   }
 }

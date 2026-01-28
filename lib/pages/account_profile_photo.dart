@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:cobra_apps/pages/dashboard_page.dart';
@@ -344,7 +344,12 @@ class _AccountProfilePhotoPageState
       try {
         await _uploadFace(File(f.path));
       } catch (e) {
-        log('upload error: $e');
+        LogService.log(
+          level: 'ERROR',
+          source: 'AccountProfilePhoto',
+          action: 'upload_error',
+          message: 'upload error: $e',
+        );
         if (mounted) {
           ScaffoldMessenger.of(
             context,
@@ -352,7 +357,12 @@ class _AccountProfilePhotoPageState
         }
       }
     } catch (e) {
-      log('takePicture error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'AccountProfilePhoto',
+        action: 'take_picture_error',
+        message: 'takePicture error: $e',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -369,7 +379,12 @@ class _AccountProfilePhotoPageState
       try {
         user = User.fromJson(json.decode(userJson));
       } catch (e) {
-        log('Error parsing user data in _uploadFace: $e');
+        LogService.log(
+          level: 'WARNING',
+          source: 'AccountProfilePhoto',
+          action: 'parse_user_error',
+          message: 'Error parsing user data in _uploadFace: $e',
+        );
       }
     }
 
@@ -387,7 +402,12 @@ class _AccountProfilePhotoPageState
         avatar: '', //avatarPrefs,
         jenis_aturan: '', // default value
       );
-      log('User data not available, using fallback values from prefs');
+      LogService.log(
+        level: 'INFO',
+        source: 'AccountProfilePhoto',
+        action: 'user_fallback',
+        message: 'User data not available, using fallback values from prefs',
+      );
     }
 
     if (mounted) {
@@ -417,8 +437,13 @@ class _AccountProfilePhotoPageState
     }
     // User model is likely generated/immutable (no setter), use copyWith to update avatar
     user = user.copyWith(avatar: '');
-    log(
-      '[AccountProfilePhoto] user.id_pegawai : ${user.id_pegawai}, user.username: ${user.username}, user.avatar: ${user.avatar}, ',
+    LogService.log(
+      level: 'DEBUG',
+      source: 'AccountProfilePhoto',
+      action: 'user_info',
+      message:
+          '[AccountProfilePhoto] user.id_pegawai : ${user.id_pegawai}, user.username: ${user.username}, user.avatar: ${user.avatar}, ',
+      idPegawai: user.id_pegawai,
     );
     final result = await FaceApiService.uploadFace(
       imageFile: compressedFile,
@@ -439,7 +464,12 @@ class _AccountProfilePhotoPageState
               .setCanSendAbsen(result.percent! >= 65.0);
         }
       }
-      log('upload response: ${result.response}');
+      LogService.log(
+        level: 'INFO',
+        source: 'AccountProfilePhoto',
+        action: 'upload_response',
+        message: 'upload response: ${result.response}',
+      );
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -533,7 +563,12 @@ class _AccountProfilePhotoPageState
               avatar: profileData.avatar ?? '',
             );
 
-        log('Profile data loaded and saved successfully');
+        LogService.log(
+          level: 'INFO',
+          source: 'AccountProfilePhoto',
+          action: 'profile_loaded',
+          message: 'Profile data loaded and saved successfully',
+        );
       } else {
         // If profile API fails, use existing data
         if (existingUser != null) {
@@ -553,12 +588,21 @@ class _AccountProfilePhotoPageState
                 avatar: existingUser.avatar,
               );
         }
-        log(
-          'Using existing preference data (profile API failed or unavailable)',
+        LogService.log(
+          level: 'WARNING',
+          source: 'AccountProfilePhoto',
+          action: 'using_existing_prefs',
+          message:
+              'Using existing preference data (profile API failed or unavailable)',
         );
       }
     } catch (e) {
-      log('Error loading preferences: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'AccountProfilePhoto',
+        action: 'load_prefs_error',
+        message: 'Error loading preferences: $e',
+      );
       // Fallback to basic defaults
       ref
           .read(accountProfileProvider.notifier)

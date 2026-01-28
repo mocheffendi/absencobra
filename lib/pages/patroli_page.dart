@@ -31,6 +31,16 @@ class _PatroliPageState extends ConsumerState<PatroliPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.read(patrolProvider.notifier).getCurrentLocation();
+      } catch (_) {}
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final patrolState = ref.watch(patrolProvider);
     final currentAddress = patrolState.currentAddress;
@@ -46,6 +56,7 @@ class _PatroliPageState extends ConsumerState<PatroliPage> {
       }
     });
     return Scaffold(
+      extendBody: true,
       extendBodyBehindAppBar: true,
       resizeToAvoidBottomInset: false,
       backgroundColor: Colors.transparent,
@@ -60,6 +71,16 @@ class _PatroliPageState extends ConsumerState<PatroliPage> {
       ),
       body: Stack(
         children: [
+          Positioned.fill(
+            child: Image.asset('assets/jpg/bg_blur.jpg', fit: BoxFit.cover),
+          ),
+          // reduced overlay so background remains visible through frosted elements
+          Positioned.fill(
+            child: Container(
+              // subtle dark tint so content remains readable
+              color: Colors.black.withValues(alpha: 0.15),
+            ),
+          ),
           DetectorView(
             title: 'Barcode Scanner',
             customPaint: _customPaint,
@@ -84,14 +105,14 @@ class _PatroliPageState extends ConsumerState<PatroliPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Lat: \\${currentPosition.latitude.toStringAsFixed(6)}',
+                          'Lat: ${currentPosition.latitude.toStringAsFixed(6)}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
                           ),
                         ),
                         Text(
-                          'Long: \\${currentPosition.longitude.toStringAsFixed(6)}',
+                          'Long: ${currentPosition.longitude.toStringAsFixed(6)}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -100,7 +121,7 @@ class _PatroliPageState extends ConsumerState<PatroliPage> {
                         SizedBox(
                           width: 180,
                           child: Text(
-                            "Lokasi: \\${currentAddress}",
+                            "Lokasi: $currentAddress",
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,

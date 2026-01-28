@@ -4,6 +4,8 @@ import 'dart:developer';
 import 'dart:io';
 import 'dart:async';
 import 'package:cobra_apps/pages/dashboard_page.dart';
+import 'package:cobra_apps/services/applog.dart';
+import 'package:cobra_apps/widgets/gradient_button.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
@@ -200,6 +202,12 @@ class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
 
   Future<void> _uploadFace(File imageFile) async {
     // Compress image before sending to FaceAPI
+    LogService.log(
+      level: 'INFO',
+      source: 'absen_masuk_page',
+      action: 'upload ke FaceApi',
+      message: 'check berapa persen kecocokan wajah',
+    );
     File? compressedFile;
     try {
       final targetPath = imageFile.path.replaceFirst('.jpg', '_compressed.jpg');
@@ -237,9 +245,16 @@ class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
           .setFaceMessage("Token autentikasi tidak tersedia");
       return;
     }
+
     final result = await FaceApiService.uploadFace(
       imageFile: compressedFile,
       user: user,
+    );
+    LogService.log(
+      level: 'INFO',
+      source: 'absen_masuk_page',
+      action: 'hasil FaceApi',
+      message: 'Prosentase hasil dari FaceApi: $result',
     );
     ref.read(absenMasukProvider.notifier).setFacePercent(result?.percent);
     ref.read(absenMasukProvider.notifier).setFaceMessage(result?.message ?? '');
@@ -449,44 +464,56 @@ class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
                       ],
                     ),
               const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _pickImage,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Ambil Foto'),
+              // ElevatedButton.icon(
+              //   onPressed: _pickImage,
+              //   icon: const Icon(Icons.camera_alt),
+              //   label: const Text('Ambil Foto'),
+              // ),
+              gradientPillButton(
+                label: 'Ambil Foto',
+                onTap: _pickImage,
+                icon: Icons.camera_alt,
+                colors: const [Color(0xff2dd7a6), Color(0xff46a6ff)],
               ),
               const SizedBox(height: 16),
               state.loading
                   ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton(
-                      onPressed:
-                          (state.imageFile != null &&
-                              state.facePercent != null &&
-                              state.facePercent! >= 65.0)
-                          ? _submit
-                          : (state.imageFile != null &&
+                  : SizedBox(
+                      width: double.infinity,
+                      child: gradientPillButton(
+                        label:
+                            (state.imageFile != null &&
                                 state.facePercent != null &&
                                 state.facePercent! < 65.0)
-                          ? () {
-                              ref
-                                  .read(absenMasukProvider.notifier)
-                                  .setImage(null);
-                              ref
-                                  .read(absenMasukProvider.notifier)
-                                  .setFacePercent(null);
-                              ref
-                                  .read(absenMasukProvider.notifier)
-                                  .setFaceMessage('');
-                              ref
-                                  .read(absenMasukProvider.notifier)
-                                  .setMessage('');
-                            }
-                          : null,
-                      child:
-                          (state.imageFile != null &&
-                              state.facePercent != null &&
-                              state.facePercent! < 65.0)
-                          ? const Text('Ulang Ambil Foto')
-                          : const Text('Kirim Absen'),
+                            ? 'Ulang Ambil Foto'
+                            : 'Kirim Absen',
+                        onTap:
+                            (state.imageFile != null &&
+                                state.facePercent != null &&
+                                state.facePercent! >= 65.0)
+                            ? _submit
+                            : (state.imageFile != null &&
+                                  state.facePercent != null &&
+                                  state.facePercent! < 65.0)
+                            ? () {
+                                ref
+                                    .read(absenMasukProvider.notifier)
+                                    .setImage(null);
+                                ref
+                                    .read(absenMasukProvider.notifier)
+                                    .setFacePercent(null);
+                                ref
+                                    .read(absenMasukProvider.notifier)
+                                    .setFaceMessage('');
+                                ref
+                                    .read(absenMasukProvider.notifier)
+                                    .setMessage('');
+                              }
+                            : null,
+                        icon: Icons.send,
+                        colors: const [Color(0xff2dd7a6), Color(0xff46a6ff)],
+                        height: 48,
+                      ),
                     ),
               const SizedBox(height: 16),
               Text(state.message, style: const TextStyle(color: Colors.red)),
@@ -498,7 +525,12 @@ class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
   }
 
   Future<void> _submit() async {
-    log('AbsenMasukPage: _submit dipanggil');
+    LogService.log(
+      level: 'INFO',
+      source: 'absen_masuk_page',
+      action: 'submit absen masuk',
+      message: 'submit absen masuk is call',
+    );
     final notifier = ref.read(absenMasukProvider.notifier);
     final state = ref.read(absenMasukProvider);
 
@@ -559,11 +591,25 @@ class _AbsenMasukPageState extends ConsumerState<AbsenMasukPage> {
       cekModeData: null,
     );
 
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_masuk_page',
+      action: 'hasil submit absen masuk',
+      message: 'Hasil submit absen masuk : $result',
+    );
+
     notifier.setLoading(false);
     if (result != null && result.error != null) {
       notifier.setMessage(result.error!);
       return;
     }
+
+    LogService.log(
+      level: 'INFO',
+      source: 'absen_masuk_age',
+      action: 'send absen sudah berhasil',
+      message: 'otomatis kembali ke Dashboard',
+    );
 
     _goToDashboard();
 

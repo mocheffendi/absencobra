@@ -97,10 +97,12 @@
 //   }
 // }
 
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
+import 'package:cobra_apps/widgets/gradient_button.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utility/shared_prefs_util.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -203,7 +205,12 @@ class _KinerjaPageState extends State<KinerjaPage> {
     try {
       // get token from shared preferences
       final token = await SharedPrefsUtil.getPref('token') as String?;
-      log("Token: $token");
+      LogService.log(
+        level: 'DEBUG',
+        source: 'kinerja_page',
+        action: 'token',
+        message: 'Token: $token',
+      );
 
       if (token == null || token.isEmpty) {
         ScaffoldMessenger.of(
@@ -213,9 +220,16 @@ class _KinerjaPageState extends State<KinerjaPage> {
         return;
       }
 
-      final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/api/kinerja_api.php',
-      );
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUrl = prefs.getString('primary_url');
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'https://absencobra.cbsguard.co.id';
+      }
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
+      final uri = Uri.parse('$baseUrl/api/kinerja_api.php');
       var request = http.MultipartRequest("POST", uri);
 
       request.headers["Authorization"] = "Bearer $token";
@@ -367,12 +381,21 @@ class _KinerjaPageState extends State<KinerjaPage> {
                   const SizedBox(height: 30),
 
                   Center(
-                    child: ElevatedButton(
-                      onPressed: isLoading ? null : uploadKinerja,
-                      child: isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text("Kirim Kinerja"),
+                    child: Expanded(
+                      flex: 5,
+                      child: gradientPillButton(
+                        label: 'Kirim Kinerja',
+                        onTap: uploadKinerja,
+                        icon: Icons.attach_file,
+                        colors: const [Color(0xff2dd7a6), Color(0xff46a6ff)],
+                      ),
                     ),
+                    // child: ElevatedButton(
+                    //   onPressed: isLoading ? null : uploadKinerja,
+                    //   child: isLoading
+                    //       ? const CircularProgressIndicator(color: Colors.white)
+                    //       : const Text("Kirim Kinerja"),
+                    // ),
                   ),
                 ],
               ),

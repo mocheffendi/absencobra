@@ -1,23 +1,54 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
+// import 'dart:io';
+import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AbsenService {
   static Future<List<Map<String, String>>> getAbsenData(
     String idPegawai,
   ) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUrl = prefs.getString('primary_url');
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'https://absencobra.cbsguard.co.id';
+      }
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
       final uri = Uri.parse(
-        'https://absencobra.cbsguard.co.id/api/get_tb_absen.php?id_pegawai=$idPegawai',
+        '$baseUrl/api/get_tb_absen.php?id_pegawai=$idPegawai',
       );
-      log('AbsenService: Calling API: $uri');
+      LogService.log(
+        level: 'INFO',
+        source: 'AbsenService',
+        action: 'call_api',
+        message: 'AbsenService: Calling API: $uri',
+      );
       final r = await http.get(uri);
-      log('AbsenService: API response status: ${r.statusCode}');
-      log('AbsenService: API response body: ${r.body}');
+      LogService.log(
+        level: 'INFO',
+        source: 'AbsenService',
+        action: 'api_status',
+        message: 'AbsenService: API response status: ${r.statusCode}',
+      );
+      LogService.log(
+        level: 'INFO',
+        source: 'AbsenService',
+        action: 'api_body',
+        message: 'AbsenService: API response body: ${r.body}',
+      );
 
       if (r.statusCode == 200) {
         final body = json.decode(r.body);
-        log('AbsenService: Decoded body: $body');
+        LogService.log(
+          level: 'INFO',
+          source: 'AbsenService',
+          action: 'decoded_body',
+          message: 'AbsenService: Decoded body: $body',
+        );
         List<dynamic> items = [];
         if (body is Map && body['data'] is List) {
           items = body['data'];
@@ -27,7 +58,12 @@ class AbsenService {
           items = [body];
         }
 
-        log('AbsenService: Found ${items.length} items in response');
+        LogService.log(
+          level: 'INFO',
+          source: 'AbsenService',
+          action: 'found_items',
+          message: 'AbsenService: Found ${items.length} items in response',
+        );
 
         // Map to our simplified structure: tanggal (harimasuk), in (wktmasuk), out (wktpulang/wktkeluar)
         final List<Map<String, String>> rows = items.map<Map<String, String>>((
@@ -78,20 +114,35 @@ class AbsenService {
               'in': masuk,
               'out': keluar,
             };
-            log('AbsenService: Mapped item: $m -> $result');
+            LogService.log(
+              level: 'DEBUG',
+              source: 'AbsenService',
+              action: 'mapped_item',
+              message: 'AbsenService: Mapped item: $m -> $result',
+            );
             return result;
           } catch (_) {
             return {'tanggal': '', 'in': '', 'out': ''};
           }
         }).toList();
 
-        log('AbsenService: Returning ${rows.length} mapped rows');
+        LogService.log(
+          level: 'INFO',
+          source: 'AbsenService',
+          action: 'return_rows',
+          message: 'AbsenService: Returning ${rows.length} mapped rows',
+        );
         return rows;
       } else {
         throw Exception('Failed to load absen data');
       }
     } catch (e) {
-      log('AbsenService: Error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'AbsenService',
+        action: 'error',
+        message: 'AbsenService: Error: $e',
+      );
       throw Exception('Error loading absen data: $e');
     }
   }
@@ -106,19 +157,38 @@ class AbsenService {
     final todayStr2 =
         '${today.day.toString().padLeft(2, '0')}-${today.month.toString().padLeft(2, '0')}-${today.year}'; // DD-MM-YYYY
 
-    log(
-      'AbsenService: Looking for today\'s data with dates: $todayStr1 or $todayStr2',
+    LogService.log(
+      level: 'DEBUG',
+      source: 'AbsenService',
+      action: 'looking_for_today',
+      message:
+          'AbsenService: Looking for today\'s data with dates: $todayStr1 or $todayStr2',
     );
 
     for (final r in absenData) {
       final t = r['tanggal'] ?? '';
-      log('AbsenService: Checking record with date: $t');
+      LogService.log(
+        level: 'DEBUG',
+        source: 'AbsenService',
+        action: 'checking_record',
+        message: 'AbsenService: Checking record with date: $t',
+      );
       if (t == todayStr1 || t == todayStr2) {
-        log('AbsenService: Found today\'s record: $r');
+        LogService.log(
+          level: 'INFO',
+          source: 'AbsenService',
+          action: 'found_today_record',
+          message: 'AbsenService: Found today\'s record: $r',
+        );
         return r;
       }
     }
-    log('AbsenService: No today\'s record found');
+    LogService.log(
+      level: 'INFO',
+      source: 'AbsenService',
+      action: 'no_today_record',
+      message: 'AbsenService: No today\'s record found',
+    );
     return null;
   }
 }

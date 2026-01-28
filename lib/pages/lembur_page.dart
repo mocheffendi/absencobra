@@ -13,6 +13,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cobra_apps/widgets/gradient_button.dart';
 import 'package:cobra_apps/providers/page_providers.dart';
 import '../providers/attendance_provider.dart';
 import '../models/user.dart';
@@ -349,9 +350,10 @@ class _LemburPageState extends ConsumerState<LemburPage> {
                       Text('${ref.watch(absenPageProvider)!['message'] ?? ''}'),
                     ],
                     const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _startCekFlow,
-                      child: const Text('Retry'),
+                    gradientPillButton(
+                      label: 'Retry',
+                      onTap: _startCekFlow,
+                      icon: Icons.refresh,
                     ),
                   ],
                 ),

@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'package:cobra_apps/utility/settings.dart';
 import '../models/user.dart';
 
@@ -156,7 +156,12 @@ class SlipGajiNotifier extends Notifier<SlipGajiState> {
     try {
       final idpegawai = user.id_pegawai.toString();
 
-      log("id_pegawai : $idpegawai");
+      LogService.log(
+        level: 'DEBUG',
+        source: 'slip_gaji_provider',
+        action: 'fetch_prepare',
+        message: 'id_pegawai : $idpegawai',
+      );
 
       final bulan = state.selectedMonth!;
       final tahun = state.selectedYear!;
@@ -180,11 +185,21 @@ class SlipGajiNotifier extends Notifier<SlipGajiState> {
       final data = jsonDecode(response.body);
       final slipData = SlipGajiData.fromJson(data);
 
-      log("data slip gaji: $data");
+      LogService.log(
+        level: 'INFO',
+        source: 'slip_gaji_provider',
+        action: 'fetched_data',
+        message: 'data slip gaji: $data',
+      );
 
       state = state.copyWith(slipData: slipData, isLoading: false, error: null);
     } catch (e) {
-      log('Slip gaji error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'slip_gaji_provider',
+        action: 'error',
+        message: 'Slip gaji error: $e',
+      );
       state = state.copyWith(error: 'Error: $e', isLoading: false);
     }
   }

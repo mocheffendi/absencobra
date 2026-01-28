@@ -1,6 +1,6 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'package:flutter/material.dart';
 
 class LocationService {
@@ -19,7 +19,12 @@ class LocationService {
       );
       return pos;
     } catch (e) {
-      log('location error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'LocationService',
+        action: 'getLocation_error',
+        message: 'location error: $e',
+      );
       return null;
     }
   }
@@ -56,7 +61,12 @@ class LocationService {
       }
       return null;
     } catch (e) {
-      log('reverse geocode error: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'LocationService',
+        action: 'resolveAddress_error',
+        message: 'reverse geocode error: $e',
+      );
       return null;
     }
   }

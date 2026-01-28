@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
@@ -175,11 +175,20 @@ class AbsenNotifier extends Notifier<AbsenData> {
         );
       }
 
-      log(
-        'AbsenProvider: State updated - absensi7 length: ${rows.length}, wktMasukToday: ${state.wktMasukToday}, wktPulangToday: ${state.wktPulangToday}',
+      LogService.log(
+        level: 'INFO',
+        source: 'absen_provider',
+        action: 'state_updated',
+        message:
+            'AbsenProvider: State updated - absensi7 length: ${rows.length}, wktMasukToday: ${state.wktMasukToday}, wktPulangToday: ${state.wktPulangToday}',
       );
     } catch (e) {
-      log('AbsenProvider: Error loading absen data: $e');
+      LogService.log(
+        level: 'ERROR',
+        source: 'absen_provider',
+        action: 'load_error',
+        message: 'AbsenProvider: Error loading absen data: $e',
+      );
       // On error, clear previous absen values to avoid showing stale data.
       state = state.copyWith(
         absensi7: [],

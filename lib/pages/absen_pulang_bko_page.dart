@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'package:cobra_apps/services/applog.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:cobra_apps/pages/dashboard_page.dart';
@@ -106,7 +106,12 @@ class _AbsenPulangBkoPageState extends ConsumerState<AbsenPulangBkoPage> {
   }
 
   void _goToDashboard() {
-    log('AbsenPulangBkoPage: _goToDashboard dipanggil');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_bko_page',
+      action: 'goToDashboard_called',
+      message: 'AbsenPulangBkoPage: _goToDashboard dipanggil',
+    );
     // Clear any scan transient state when leaving AbsenPulang so scanner doesn't keep stale data when user returns.
     try {
       ref.read(scanPulangProvider.notifier).clear();
@@ -115,12 +120,22 @@ class _AbsenPulangBkoPageState extends ConsumerState<AbsenPulangBkoPage> {
     try {
       ref.read(absenPulangProvider.notifier).clear();
     } catch (_) {}
-    log('AbsenPulangBkoPage: navigating to Dashboard (root)');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_bko_page',
+      action: 'navigating_to_dashboard',
+      message: 'AbsenPulangBkoPage: navigating to Dashboard (root)',
+    );
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const DashboardPage()),
       (route) => false,
     );
-    log('AbsenPulangBkoPage: navigation to Dashboard requested');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_bko_page',
+      action: 'navigation_requested',
+      message: 'AbsenPulangBkoPage: navigation to Dashboard requested',
+    );
   }
 
   @override
@@ -471,7 +486,12 @@ class _AbsenPulangBkoPageState extends ConsumerState<AbsenPulangBkoPage> {
   }
 
   Future<void> _submit() async {
-    log('AbsenMasukPage: _submit dipanggil');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_bko_page',
+      action: '_submit_called',
+      message: 'AbsenPulangBkoPage: _submit dipanggil',
+    );
     final notifier = ref.read(absenPulangProvider.notifier);
     final state = ref.read(absenPulangProvider);
 
@@ -532,7 +552,12 @@ class _AbsenPulangBkoPageState extends ConsumerState<AbsenPulangBkoPage> {
       idAbsen = prefs.getString('id_absen');
     }
 
-    log('[AbsenPulangBko] idAbsen: $idAbsen');
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_bko_page',
+      action: 'id_absen_value',
+      message: '[AbsenPulangBko] idAbsen: $idAbsen',
+    );
 
     final result = await AbsenKeluarBkoService.sendAbsen(
       user: user,
@@ -541,6 +566,13 @@ class _AbsenPulangBkoPageState extends ConsumerState<AbsenPulangBkoPage> {
       cekModeData: widget.data,
       harimasuk: widget.data?['harimasuk']?.toString(),
       idAbsen: idAbsen,
+    );
+
+    LogService.log(
+      level: 'DEBUG',
+      source: 'absen_pulang_bko_page',
+      action: 'Hasil submit absen bko pulang',
+      message: 'Hasil submit absen pulang bko: $result',
     );
 
     notifier.setLoading(false);

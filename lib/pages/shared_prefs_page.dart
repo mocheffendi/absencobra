@@ -46,12 +46,68 @@ class _SharedPrefsPageState extends ConsumerState<SharedPrefsPage> {
     final user = ref.watch(userPrefsProvider);
     final entries = prefs.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
+    final primaryUrl = prefs['primaryUrl']?.toString();
+    final fallbackRaw = prefs['fallbackUrls'];
+    List<String>? fallbackUrls;
+    if (fallbackRaw is List) {
+      fallbackUrls = fallbackRaw.map((e) => e.toString()).toList();
+    } else if (fallbackRaw is String) {
+      try {
+        final decoded = json.decode(fallbackRaw);
+        if (decoded is List)
+          fallbackUrls = decoded.map((e) => e.toString()).toList();
+      } catch (_) {}
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Shared Preferences')),
       body: RefreshIndicator(
         onRefresh: _loadPrefs,
         child: ListView(
           children: [
+            if (primaryUrl != null ||
+                (fallbackUrls != null && fallbackUrls.isNotEmpty)) ...[
+              const SizedBox(height: 16),
+              const Center(
+                child: Text(
+                  'Endpoint URLs',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+              if (primaryUrl != null)
+                ListTile(
+                  title: const Text('Primary URL'),
+                  subtitle: Text(primaryUrl),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.copy),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: primaryUrl));
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('Copied')));
+                    },
+                  ),
+                ),
+              if (fallbackUrls != null && fallbackUrls.isNotEmpty)
+                ListTile(
+                  title: const Text('Fallback URLs'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: fallbackUrls.map((u) => Text(u)).toList(),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.copy),
+                    onPressed: () {
+                      Clipboard.setData(
+                        ClipboardData(text: fallbackUrls!.join('\n')),
+                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('Copied')));
+                    },
+                  ),
+                ),
+              const Divider(),
+            ],
             if (user != null) ...[
               const SizedBox(height: 16),
               const Center(
