@@ -1,10 +1,12 @@
-import 'dart:io';
+// import 'dart:io';
 
 import 'package:cobra_apps/models/user.dart';
 import 'package:cobra_apps/pages/dashboard_page.dart';
 import 'package:cobra_apps/utility/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'detector_view.dart';
+import 'package:cobra_apps/widgets/barcode_detector_painter.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
@@ -26,16 +28,16 @@ class ScanPulangBkoPage extends ConsumerStatefulWidget {
 }
 
 class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
-  CameraController? _cameraController;
   BarcodeScanner? _barcodeScanner;
+  CustomPaint? _customPaint;
+  String? _text;
+  var _cameraLensDirection = CameraLensDirection.back;
+  bool _isBusy = false;
 
   @override
   void reassemble() {
     super.reassemble();
-    if (Platform.isAndroid) {
-      _cameraController?.pausePreview();
-      _cameraController?.resumePreview();
-    }
+    // no-op for DetectorView
   }
 
   @override
@@ -47,7 +49,6 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
       log('Error clearing scanPulangProvider state in dispose: $e');
     }
 
-    _cameraController?.dispose();
     _barcodeScanner?.close();
     super.dispose();
   }
@@ -71,14 +72,6 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
             log(
               'scan_pulang_page: isScanning set to true by delayed postFrame',
             );
-            // If camera already initialized, (re)start the scanning loop.
-            if (_cameraController != null &&
-                _cameraController!.value.isInitialized) {
-              log(
-                'scan_pulang_page: camera initialized; starting barcode scanning after enabling isScanning',
-              );
-              _startBarcodeScanning();
-            }
           } catch (e) {
             log('Error enabling isScanning after delay: $e');
           }
@@ -98,115 +91,11 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
       } catch (e) {
         log('Error clearing scanPulangProvider state in postFrame: $e');
       }
-      await _initializeCamera();
       await _ensureAndGetLocation();
     });
   }
 
-  Future<void> _initializeCamera() async {
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) return;
-
-      // Use the first available camera (usually back camera)
-      _cameraController = CameraController(
-        cameras.first,
-        ResolutionPreset.high,
-        enableAudio: false,
-      );
-
-      await _cameraController!.initialize();
-      if (mounted) {
-        ref.read(scanPulangProvider.notifier).setCameraInitialized(true);
-        _startBarcodeScanning();
-      }
-    } catch (e) {
-      log('Error initializing camera: $e');
-    }
-  }
-
-  void _startBarcodeScanning() {
-    log('Starting barcode scanning');
-
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      log('scan_pulang_page: camera not ready, skipping start');
-      return;
-    }
-
-    // Take picture periodically for barcode scanning
-    Future.doWhile(() async {
-      final isScanning = ref.read(scanPulangProvider).isScanning;
-      final controllerReady =
-          _cameraController != null && _cameraController!.value.isInitialized;
-      if (!mounted || !isScanning || !controllerReady) {
-        log(
-          'scan_pulang_page: doWhile exit condition met - mounted=$mounted, isScanning=$isScanning, controllerReady=$controllerReady',
-        );
-        return false;
-      }
-
-      try {
-        final XFile file = await _cameraController!.takePicture();
-        // Diagnostics: log captured image path and size so we can inspect what ML Kit receives
-        try {
-          final f = File(file.path);
-          final len = await f.length();
-          log('Captured image: ${file.path}, size=$len bytes');
-        } catch (e) {
-          log('Failed to stat captured image: $e');
-        }
-
-        final inputImage = InputImage.fromFilePath(file.path);
-        final barcodes = await _barcodeScanner!.processImage(inputImage);
-
-        log('Processing ${barcodes.length} barcodes');
-
-        final now = DateTime.now().millisecondsSinceEpoch;
-        for (final barcode in barcodes) {
-          final code = barcode.rawValue?.trim();
-          if (code == null || code.isEmpty) {
-            log('Skipping empty/null barcode rawValue');
-            continue;
-          }
-          final state = ref.read(scanPulangProvider);
-          final last = state.lastCode;
-          final lastTs = state.lastCodeTimestamp ?? 0;
-
-          log(
-            'Found barcode: rawValue=${barcode.rawValue}, trimmed="$code", type=${barcode.type}, currentLast=$last, lastTs=$lastTs',
-          );
-
-          if (code == last && (now - lastTs) < 2000) {
-            log(
-              'Skipping duplicate (recent) code: $code, age=${now - lastTs}ms',
-            );
-            continue;
-          }
-
-          // Accept this code and set timestamp atomically
-          ref.read(scanPulangProvider.notifier).setLastCodeWithTimestamp(code);
-          log('Scanned QR Code: $code');
-          ref.read(scanPulangProvider.notifier).setIsValidating(true);
-          ref.read(scanPulangProvider.notifier).setQrValidationResult(null);
-          ref.read(scanPulangProvider.notifier).setValidationError(null);
-
-          await _validateQRCode(code);
-          break; // Process only the first barcode found
-        }
-
-        // Delete the temporary file
-        await File(file.path).delete();
-
-        // Wait a bit before taking next picture
-        await Future.delayed(const Duration(milliseconds: 500));
-      } catch (e) {
-        log('Error processing barcode: $e');
-        await Future.delayed(const Duration(milliseconds: 1000));
-      }
-
-      return true; // Continue the loop
-    });
-  }
+  // DetectorView will provide frames; handle them in _processImage
 
   Future<void> _validateQRCode(String code) async {
     try {
@@ -249,9 +138,7 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
         Map<String, dynamic>? data;
         try {
           final body = resp.body.trim();
-          if (body.isEmpty) {
-            throw FormatException('Empty response');
-          }
+          if (body.isEmpty) throw FormatException('Empty response');
           final parsed = jsonDecode(body);
           if (parsed is Map<String, dynamic>) {
             data = parsed;
@@ -417,21 +304,12 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
               child: InkWell(
                 borderRadius: BorderRadius.circular(24),
                 onTap: () async {
-                  if (_cameraController != null) {
-                    try {
-                      await _cameraController!.setFlashMode(
-                        _cameraController!.value.flashMode == FlashMode.off
-                            ? FlashMode.torch
-                            : FlashMode.off,
-                      );
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Flash toggled')),
-                      );
-                    } catch (e) {
-                      log('Error toggling flash: $e');
-                    }
-                  }
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Flash not available in this mode'),
+                    ),
+                  );
                 },
                 child: const Padding(
                   padding: EdgeInsets.all(10),
@@ -450,11 +328,15 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
                 children: [
                   // Camera preview or loading indicator
                   Positioned.fill(
-                    child:
-                        _cameraController != null &&
-                            _cameraController!.value.isInitialized
-                        ? CameraPreview(_cameraController!)
-                        : const Center(child: CircularProgressIndicator()),
+                    child: DetectorView(
+                      title: 'Scan Pulang BKO',
+                      customPaint: _customPaint,
+                      text: _text,
+                      onImage: _processImage,
+                      initialCameraLensDirection: _cameraLensDirection,
+                      onCameraLensDirectionChanged: (value) =>
+                          _cameraLensDirection = value,
+                    ),
                   ),
 
                   // Scanner overlay sits above the camera preview but below UI overlays
@@ -545,11 +427,7 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
                                 notifier.setValidationError(null);
                                 notifier.setIsValidating(false);
                                 notifier.setIsScanning(true);
-                                log('User requested rescan (Scan Pulang)');
-                                if (_cameraController != null &&
-                                    _cameraController!.value.isInitialized) {
-                                  _startBarcodeScanning();
-                                }
+                                log('User requested rescan (Scan Pulang BKO)');
                               } catch (e) {
                                 log('Error during rescan (Scan Pulang): $e');
                               }
@@ -588,7 +466,7 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
                                 ),
                               if (state.distanceMeters != null)
                                 Text(
-                                  'Jarak ke QR: ${state.distanceMeters!.toStringAsFixed(1)} meter',
+                                  'Jarak ke QR: ${_formatDistance(state.distanceMeters!)}',
                                   style: const TextStyle(
                                     color: Colors.orangeAccent,
                                     fontSize: 12,
@@ -679,7 +557,7 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
                                       Padding(
                                         padding: const EdgeInsets.only(top: 4),
                                         child: Text(
-                                          'Jarak ke lokasi validasi: ${distance.toStringAsFixed(1)} meter',
+                                          'Jarak ke lokasi validasi: ${_formatDistance(distance)}',
                                           style: const TextStyle(
                                             color: Colors.orangeAccent,
                                             fontSize: 13,
@@ -755,16 +633,70 @@ class _ScanPulangBkoPageState extends ConsumerState<ScanPulangBkoPage> {
     } catch (e) {
       log('Error clearing scanPulangProvider state in _goToDashboard: $e');
     }
-
-    try {
-      // stop camera first
-      await _cameraController?.stopImageStream();
-      await _cameraController?.pausePreview();
-    } catch (_) {}
+    // No camera controller to stop when using DetectorView; provider cleared above.
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const DashboardPage()),
       (route) => false,
     );
+  }
+
+  String _formatDistance(double meters) {
+    if (meters >= 1000) {
+      final km = meters / 1000.0;
+      return '${km.toStringAsFixed(2)} km';
+    }
+    return '${meters.toStringAsFixed(1)} meter';
+  }
+
+  Future<void> _processImage(InputImage inputImage) async {
+    final isScanning = ref.read(scanPulangProvider).isScanning;
+    if (!isScanning) return;
+    if (_isBusy) return;
+    _isBusy = true;
+    setState(() => _text = '');
+
+    final barcodes = await _barcodeScanner!.processImage(inputImage);
+
+    if (inputImage.metadata?.size != null &&
+        inputImage.metadata?.rotation != null) {
+      final painter = BarcodeDetectorPainter(
+        barcodes,
+        inputImage.metadata!.size,
+        inputImage.metadata!.rotation,
+        _cameraLensDirection,
+      );
+      _customPaint = CustomPaint(painter: painter);
+    } else {
+      String text = 'Barcodes found: ${barcodes.length}\n\n';
+      for (final barcode in barcodes) {
+        text += 'Barcode: ${barcode.rawValue}\n\n';
+      }
+      _text = text;
+      _customPaint = null;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final barcode in barcodes) {
+      final code = barcode.rawValue?.trim();
+      if (code == null || code.isEmpty) continue;
+      final state = ref.read(scanPulangProvider);
+      final last = state.lastCode;
+      final lastTs = state.lastCodeTimestamp ?? 0;
+      if (code == last && (now - lastTs) < 2000) {
+        continue;
+      }
+
+      ref.read(scanPulangProvider.notifier).setLastCodeWithTimestamp(code);
+      ref.read(scanPulangProvider.notifier).setIsValidating(true);
+      ref.read(scanPulangProvider.notifier).setQrValidationResult(null);
+      ref.read(scanPulangProvider.notifier).setValidationError(null);
+
+      await _validateQRCode(code);
+      break;
+    }
+
+    _isBusy = false;
+    if (mounted) setState(() {});
   }
 }

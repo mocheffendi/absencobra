@@ -228,7 +228,7 @@ class _PatrolPhotoPageState extends ConsumerState<PatrolPhotoPage> {
   }
 
   Future<void> _submitWithoutPhoto() async {
-    final state = ref.read(patrolPhotoProvider);
+    // final state = ref.read(patrolPhotoProvider);
     if (_keteranganController.text.isEmpty) {
       ref
           .read(patrolPhotoProvider.notifier)

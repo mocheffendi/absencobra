@@ -28,5 +28,22 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikasi memerlukan akses kamera untuk mengambil gambar.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Aplikasi memerlukan akses mikrofon untuk merekam audio.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Aplikasi memerlukan lokasi saat digunakan.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Aplikasi memerlukan akses lokasi terus-menerus untuk fitur lokasi latar depan dan latar belakang.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aplikasi memerlukan akses ke galeri foto untuk memilih atau menyimpan gambar.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Aplikasi memerlukan izin untuk menyimpan file ke galeri.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

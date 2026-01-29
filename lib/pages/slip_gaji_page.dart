@@ -25,7 +25,7 @@ class _SlipGajiPageState extends ConsumerState<SlipGajiPage> {
   @override
   Widget build(BuildContext context) {
     final slipGajiState = ref.watch(slipGajiProvider);
-    final isLoading = slipGajiState.isLoading;
+    // final isLoading = slipGajiState.isLoading;
     // final slipData = slipGajiState.slipData; // unused here
     final selectedMonth = slipGajiState.selectedMonth;
     final selectedYear = slipGajiState.selectedYear;
